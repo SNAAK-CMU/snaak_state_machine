@@ -74,13 +74,17 @@ class ReadRecipe(State):
 
     def execute(self, blackboard: Blackboard) -> str:
         yasmin.YASMIN_LOG_INFO("Reading Recipe")
-        time.sleep(1)  
+        time.sleep(3)  
         
         file_path = "/home/snaak/Documents/recipe/cheese.yaml"
 
         if os.path.exists(file_path):
             with open(file_path, 'r') as file:
+                # #change this to recipe
                 blackboard["yaml_content"] = yaml.safe_load(file)
+                blackboard["current_ingredient"] = "cheese"
+                blackboard["current_ingredient_qty"] = 1
+                
             yasmin.YASMIN_LOG_INFO("YAML file found")
             return "outcome2"
         else:
@@ -100,7 +104,7 @@ class ReturnHomeState(State):
         
         
         result = send_goal(self.node, self._reset_arm_client, goal_msg)
-        
+        # Home
         if result == True:
             yasmin.YASMIN_LOG_INFO("Goal succeeded")
             # blackboard["foo_str"] = "home"
@@ -108,6 +112,35 @@ class ReturnHomeState(State):
         else:
             yasmin.YASMIN_LOG_ERROR(f"Goal failed with status {True}")
             return "outcome3"
+        
+class BreadLocalizationState(State):
+    def __init__(self, node) -> None:
+        super().__init__(outcomes=["outcome4"])
+        self.node = node
+
+        self._traj_action_client = ActionClient(self.node, ExecuteTrajectory, 'snaak_manipulation/execute_trajectory')
+        self._get_place_xyz_client = self.node.create_client(GetXYZFromImage, 'snaak_vision/get_place_point')
+
+
+    def execute(self, blackboard: Blackboard) -> str:
+        yasmin.YASMIN_LOG_INFO("Executing state PreGrasp")
+        goal_msg = ExecuteTrajectory.Goal()
+        
+        goal_msg.desired_location = "assembly"
+        result = send_goal(self.node, self._traj_action_client, goal_msg)
+
+        print(result)
+        
+        pickup_point = get_point_XYZ(self.node, self._get_place_xyz_client, 5, pickup=False)
+        blackboard["bread_center_coordinate"] = pickup_point
+        print(pickup_point)
+        
+        if result == True:
+            yasmin.YASMIN_LOG_INFO("Goal succeeded")
+            return "outcome4"
+        else:
+            yasmin.YASMIN_LOG_ERROR(f"Goal failed with status {True}")
+            return "outcome4"
         
 class PreGraspState(State):
     def __init__(self, node) -> None:
@@ -167,7 +200,7 @@ class PickupState(State):
 
     def execute(self, blackboard: Blackboard) -> str:
         yasmin.YASMIN_LOG_INFO("Executing state PreGrasp")
-        goal_msg = ExecuteTrajectory.Goal()
+        goal_msg = Pickup.Goal()
 
         
         # self.get_point_XYZ(location=self.location_id['assembly_tray_id'], pickup=False)
@@ -175,11 +208,11 @@ class PickupState(State):
         # destination_x, destination_y, destination_z = pickup_point
         print(pickup_point.x)
         # time.sleep(5)
-        # goal_msg.x = pickup_point.x
-        # goal_msg.y = pickup_point.y
-        # goal_msg.z = pickup_point.z
-        goal_msg = pickup_point
-        
+        goal_msg.x = pickup_point.x
+        goal_msg.y = pickup_point.y
+        goal_msg.z = pickup_point.z
+        # goal_msg = pickup_point
+        goal_msg.ingredient_type = 1        
 
         result = send_goal(self.node, self._pickup_action_client, goal_msg)
         print(result)
@@ -202,40 +235,48 @@ def main():
 
     set_ros_loggers()
 
-    sm = StateMachine(outcomes=["outcome4"])
+    sm = StateMachine(outcomes=["outcome11"])
 
     sm.add_state(
         "Recipe",
         ReadRecipe(),
         transitions={
             "outcome1": "Recipe",
-            "outcome2": "Pickup", 
-            # "outcome2": "outcome4",
+            "outcome2": "Home", 
         },
     )
     sm.add_state(
         "Home",
         ReturnHomeState(node),
         transitions={
-            "outcome3": "PreGrasp",
+            "outcome3": "BreadLocalization",
         },
     )
+
+    sm.add_state(
+        "BreadLocalization",
+        BreadLocalizationState(node),
+        transitions={
+            "outcome4": "PreGrasp",
+        },
+    )
+
 
     sm.add_state(
         "PreGrasp",
         PreGraspState(node),
         transitions={
-            "outcome5": "Recipe",
+            "outcome5": "Pickup",
         },
     )
 
-    sm.add_state(
-        "PreHome",
-        PreHomeState(node),
-        transitions={
-            "outcome6": "Recipe",
-        },
-    )
+    # sm.add_state(
+    #     "PreHome",
+    #     PreHomeState(node),
+    #     transitions={
+    #         "outcome6": "Recipe",
+    #     },
+    # )
 
     sm.add_state(
         "Pickup",
@@ -245,7 +286,7 @@ def main():
         },
     )
 
-    YasminViewerPub("yasmin_demo", sm)
+    YasminViewerPub("yasmin_snaak", sm)
 
     try:
         outcome = sm()
