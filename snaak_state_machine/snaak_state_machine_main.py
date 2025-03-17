@@ -84,13 +84,14 @@ class ReadRecipe(State):
                 blackboard["yaml_content"] = yaml.safe_load(file)
                 blackboard["current_ingredient"] = "cheese"
                 blackboard["current_ingredient_qty"] = 1
+                if "bread_center_coordinate" not in blackboard:
+                    blackboard["bread_center_coordinate"] = None
                 
             yasmin.YASMIN_LOG_INFO("YAML file found")
             return "outcome2"
         else:
             yasmin.YASMIN_LOG_ERROR("YAML file not found")
             return "outcome1"
-        
 
 class ReturnHomeState(State):
     def __init__(self, node) -> None:
@@ -120,10 +121,14 @@ class BreadLocalizationState(State):
 
         self._traj_action_client = ActionClient(self.node, ExecuteTrajectory, 'snaak_manipulation/execute_trajectory')
         self._get_place_xyz_client = self.node.create_client(GetXYZFromImage, 'snaak_vision/get_place_point')
-
+        
 
     def execute(self, blackboard: Blackboard) -> str:
         yasmin.YASMIN_LOG_INFO("Executing state PreGrasp")
+        if blackboard["bread_center_coordinate"] is not None:
+            yasmin.YASMIN_LOG_INFO("Bread already localized")
+            return "outcome4"
+
         goal_msg = ExecuteTrajectory.Goal()
         
         goal_msg.desired_location = "assembly"
@@ -189,7 +194,6 @@ class PreHomeState(State):
             yasmin.YASMIN_LOG_ERROR(f"Goal failed with status {True}")
             return "outcome6"
 
-
 class PickupState(State):
     def __init__(self, node) -> None:
         super().__init__(outcomes=["outcome7"])
@@ -224,7 +228,60 @@ class PickupState(State):
             yasmin.YASMIN_LOG_ERROR(f"Goal failed with status {True}")
             return "outcome7"
 
+class PrePlaceState(State):
+    def __init__(self, node) -> None:
+        super().__init__(outcomes=["outcome8"])
+        self.node = node
 
+        self._traj_action_client = ActionClient(self.node, ExecuteTrajectory, 'snaak_manipulation/execute_trajectory')
+
+    def execute(self, blackboard: Blackboard) -> str:
+        yasmin.YASMIN_LOG_INFO("Executing state PrePlace")
+        goal_msg = ExecuteTrajectory.Goal()
+
+        goal_msg.desired_location = "assembly"
+
+        result = send_goal(self.node, self._traj_action_client, goal_msg)
+
+        if result == True:
+            yasmin.YASMIN_LOG_INFO("Goal succeeded")
+            return "outcome8"
+        else:
+            yasmin.YASMIN_LOG_ERROR(f"Goal failed with status {True}")
+            return "outcome8"
+
+class PlaceState(State):
+    def __init__(self, node) -> None:
+        super().__init__(outcomes=["outcome9"])
+        self.node = node
+
+        self._place_action_client = ActionClient(self.node, Place, 'snaak_manipulation/place')
+
+    def execute(self, blackboard: Blackboard) -> str:
+        yasmin.YASMIN_LOG_INFO("Executing state Place")
+        goal_msg = Place.Goal()
+
+        pickup_point = blackboard["bread_center_coordinate"]
+        print(pickup_point.x)
+        print(pickup_point.y)
+        print(pickup_point.z)
+
+        # time.sleep(5)
+        goal_msg.x = pickup_point.x
+        goal_msg.y = pickup_point.y
+        goal_msg.z = pickup_point.z
+        # goal_msg = pickup_point
+        goal_msg.ingredient_type = 1        
+
+        result = send_goal(self.node, self._place_action_client, goal_msg)
+        print(result)
+
+        if result == True:
+            yasmin.YASMIN_LOG_INFO("Goal succeeded")
+            return "outcome9"
+        else:
+            yasmin.YASMIN_LOG_ERROR(f"Goal failed with status {True}")
+            return "outcome9"
 
 
 def main():
@@ -282,7 +339,23 @@ def main():
         "Pickup",
         PickupState(node),
         transitions={
-            "outcome7": "Recipe",
+            "outcome7": "PrePlace",
+        },
+    )
+
+    sm.add_state(
+        "PrePlace",
+        PrePlaceState(node),
+        transitions={
+            "outcome8": "Place",
+        },
+    )
+
+    sm.add_state(
+        "Place",
+        PlaceState(node),
+        transitions={
+            "outcome9": "Recipe",
         },
     )
 
