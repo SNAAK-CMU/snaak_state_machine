@@ -81,9 +81,12 @@ class ReadRecipe(State):
         if os.path.exists(file_path):
             with open(file_path, 'r') as file:
                 # #change this to recipe
-                blackboard["yaml_content"] = yaml.safe_load(file)
-                blackboard["current_ingredient"] = "cheese"
-                blackboard["current_ingredient_qty"] = 1
+                recipe = yaml.safe_load(file)
+                print(recipe)
+                blackboard["cheese"] = recipe["recipe"][0]["cheese"]
+                # blackboard["current_ingredient_qty"] = 1
+                print(recipe['recipe'][0])
+                blackboard["ham"] = recipe["recipe"][1]["ham"]
                 if "bread_center_coordinate" not in blackboard:
                     blackboard["bread_center_coordinate"] = None
                 
@@ -149,7 +152,7 @@ class BreadLocalizationState(State):
         
 class PreGraspState(State):
     def __init__(self, node) -> None:
-        super().__init__(outcomes=["outcome5"])
+        super().__init__(outcomes=["outcome5", "outcome10"])
         self.node = node
 
         self._traj_action_client = ActionClient(self.node, ExecuteTrajectory, 'snaak_manipulation/execute_trajectory')
@@ -157,17 +160,45 @@ class PreGraspState(State):
     def execute(self, blackboard: Blackboard) -> str:
         yasmin.YASMIN_LOG_INFO("Executing state PreGrasp")
         goal_msg = ExecuteTrajectory.Goal()
+        #cheese
+        # goal_msg.desired_location = "bin2"
 
-        goal_msg.desired_location = "bin2"
+        #ham
+        if blackboard["cheese"] > 0:
+            blackboard["cheese"] -= 1
+            blackboard['current_ingredient'] = "cheese"
+            goal_msg.desired_location = "bin2"
+            yasmin.YASMIN_LOG_INFO("cheese position")
+            result = send_goal(self.node, self._traj_action_client, goal_msg)
+            if result == True:
 
-        result = send_goal(self.node, self._traj_action_client, goal_msg)
+                yasmin.YASMIN_LOG_INFO("Goal succeeded")
+                return "outcome5"
+            else:
+                yasmin.YASMIN_LOG_ERROR(f"Goal failed with status {True}")
+                return "outcome5"
 
-        if result == True:
-            yasmin.YASMIN_LOG_INFO("Goal succeeded")
-            return "outcome5"
-        else:
-            yasmin.YASMIN_LOG_ERROR(f"Goal failed with status {True}")
-            return "outcome5"
+        if blackboard["ham"] > 0:
+            blackboard["ham"] -= 1
+            blackboard['current_ingredient'] = "ham"
+            goal_msg.desired_location = "bin1"
+            yasmin.YASMIN_LOG_INFO("ham position")
+            result = send_goal(self.node, self._traj_action_client, goal_msg)
+
+            if result == True:
+                yasmin.YASMIN_LOG_INFO("Goal succeeded")
+                return "outcome5"
+            else:
+                yasmin.YASMIN_LOG_ERROR(f"Goal failed with status {True}")
+                return "outcome5"
+
+        return "outcome10"
+
+
+        
+        # result = send_goal(self.node, self._traj_action_client, goal_msg)
+
+        
         
 class PreHomeState(State):
     """
@@ -208,7 +239,17 @@ class PickupState(State):
 
         
         # self.get_point_XYZ(location=self.location_id['assembly_tray_id'], pickup=False)
-        pickup_point = get_point_XYZ(self.node, self._get_pickup_xyz_client, 2, pickup=True)
+        #cheese
+        # pickup_point = get_point_XYZ(self.node, self._get_pickup_xyz_client, 2, pickup=True)
+
+        #ham
+        if blackboard['current_ingredient'] == "cheese":
+            pickup_point = get_point_XYZ(self.node, self._get_pickup_xyz_client, 2, pickup=True)
+
+        
+        elif blackboard['current_ingredient'] == "ham":
+            pickup_point = get_point_XYZ(self.node, self._get_pickup_xyz_client, 1, pickup=True)
+
         # destination_x, destination_y, destination_z = pickup_point
         print(pickup_point.x)
         # time.sleep(5)
@@ -324,6 +365,7 @@ def main():
         PreGraspState(node),
         transitions={
             "outcome5": "Pickup",
+            "outcome10": "Recipe",
         },
     )
 
@@ -355,7 +397,7 @@ def main():
         "Place",
         PlaceState(node),
         transitions={
-            "outcome9": "Recipe",
+            "outcome9": "PreGrasp",
         },
     )
 
