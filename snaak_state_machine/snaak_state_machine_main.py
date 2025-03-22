@@ -74,7 +74,7 @@ class ReadRecipe(State):
 
     def execute(self, blackboard: Blackboard) -> str:
         yasmin.YASMIN_LOG_INFO("Reading Recipe")
-        time.sleep(3)  
+        time.sleep(1)
         
         file_path = "/home/snaak/Documents/recipe/cheese.yaml"
 
@@ -87,6 +87,7 @@ class ReadRecipe(State):
                 # blackboard["current_ingredient_qty"] = 1
                 print(recipe['recipe'][0])
                 blackboard["ham"] = recipe["recipe"][1]["ham"]
+                blackboard['ingredient_thickness'] = 0
                 if "bread_center_coordinate" not in blackboard:
                     blackboard["bread_center_coordinate"] = None
                 
@@ -166,6 +167,7 @@ class PreGraspState(State):
         #ham
         if blackboard["cheese"] > 0:
             blackboard["cheese"] -= 1
+            blackboard['ingredient_thickness'] += 0.005
             blackboard['current_ingredient'] = "cheese"
             goal_msg.desired_location = "bin2"
             yasmin.YASMIN_LOG_INFO("cheese position")
@@ -180,6 +182,7 @@ class PreGraspState(State):
 
         if blackboard["ham"] > 0:
             blackboard["ham"] -= 1
+            blackboard['ingredient_thickness'] += 0.005
             blackboard['current_ingredient'] = "ham"
             goal_msg.desired_location = "bin1"
             yasmin.YASMIN_LOG_INFO("ham position")
@@ -310,7 +313,7 @@ class PlaceState(State):
         # time.sleep(5)
         goal_msg.x = pickup_point.x
         goal_msg.y = pickup_point.y
-        goal_msg.z = pickup_point.z
+        goal_msg.z = pickup_point.z + blackboard['ingredient_thickness']
         # goal_msg = pickup_point
         goal_msg.ingredient_type = 1        
 
@@ -365,7 +368,7 @@ def main():
         PreGraspState(node),
         transitions={
             "outcome5": "Pickup",
-            "outcome10": "Recipe",
+            "outcome10": "outcome11",
         },
     )
 
