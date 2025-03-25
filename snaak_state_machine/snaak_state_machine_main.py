@@ -87,6 +87,14 @@ class ReadRecipe(State):
                 # blackboard["current_ingredient_qty"] = 1
                 print(recipe['recipe'][0])
                 blackboard["ham"] = recipe["recipe"][1]["ham"]
+                blackboard["bread_top_slice"] = False
+                blackboard["bread_bottom_slice"] = False
+
+
+                # (x=0.47050124406814575, y=-0.016270264983177185, z=0.2627856433391571)
+
+                blackboard["tray_center_coordinate"] = {"x":0.47050124406814575, "y":-0.016270264983177185, "z":0.2627856433391571}
+
                 blackboard['ingredient_thickness'] = 0
                 if "bread_center_coordinate" not in blackboard:
                     blackboard["bread_center_coordinate"] = None
@@ -153,7 +161,7 @@ class BreadLocalizationState(State):
         
 class PreGraspState(State):
     def __init__(self, node) -> None:
-        super().__init__(outcomes=["outcome5", "outcome10"])
+        super().__init__(outcomes=["outcome5",  "outcome10"])
         self.node = node
 
         self._traj_action_client = ActionClient(self.node, ExecuteTrajectory, 'snaak_manipulation/execute_trajectory')
@@ -163,8 +171,37 @@ class PreGraspState(State):
         goal_msg = ExecuteTrajectory.Goal()
         #cheese
         # goal_msg.desired_location = "bin2"
+        
 
         #ham
+        if blackboard["bread_bottom_slice"] == False : 
+            blackboard["bread_bottom_slice"] = True
+            blackboard['ingredient_thickness'] += 0.005
+            blackboard["current_ingredient"] = "bread_bottom_slice"
+            goal_msg.desired_location = "bin3"
+            yasmin.YASMIN_LOG_INFO("bread bottom slice position")
+            result = send_goal(self.node, self._traj_action_client, goal_msg)
+            if result == True:
+                yasmin.YASMIN_LOG_INFO("Goal succeeded")
+                return "outcome5"
+            else:
+                yasmin.YASMIN_LOG_ERROR(f"Goal failed with status {True}")
+                return "outcome5"
+
+        if blackboard["bread_top_slice"] == False and blackboard["cheese"] <= 0 and blackboard["ham"] <= 0:
+            blackboard["bread_top_slice"] = True
+            blackboard['ingredient_thickness'] += 0.005
+            blackboard["current_ingredient"] = "bread_top_slice"
+            goal_msg.desired_location = "bin3"
+            yasmin.YASMIN_LOG_INFO("bread top slice position")
+            result = send_goal(self.node, self._traj_action_client, goal_msg)
+            if result == True:
+                yasmin.YASMIN_LOG_INFO("Goal succeeded")
+                return "outcome5"
+            else:
+                yasmin.YASMIN_LOG_ERROR(f"Goal failed with status {True}")
+                return "outcome5"
+
         if blackboard["cheese"] > 0:
             blackboard["cheese"] -= 1
             blackboard['ingredient_thickness'] += 0.005
@@ -194,6 +231,7 @@ class PreGraspState(State):
             else:
                 yasmin.YASMIN_LOG_ERROR(f"Goal failed with status {True}")
                 return "outcome5"
+            
 
         return "outcome10"
 
@@ -201,32 +239,6 @@ class PreGraspState(State):
         
         # result = send_goal(self.node, self._traj_action_client, goal_msg)
 
-        
-        
-class PreHomeState(State):
-    """
-    Remove this, not required, only for testing
-    """
-    def __init__(self, node) -> None:
-        super().__init__(outcomes=["outcome6"])
-        self.node = node
-
-        self._traj_action_client = ActionClient(self.node, ExecuteTrajectory, 'snaak_manipulation/execute_trajectory')
-
-    def execute(self, blackboard: Blackboard) -> str:
-        yasmin.YASMIN_LOG_INFO("Executing state Home")
-        goal_msg = ExecuteTrajectory.Goal()
-
-        goal_msg.desired_location = "home"
-
-        result = send_goal(self.node, self._traj_action_client, goal_msg)
-
-        if result == True:
-            yasmin.YASMIN_LOG_INFO("Goal succeeded")
-            return "outcome6"
-        else:
-            yasmin.YASMIN_LOG_ERROR(f"Goal failed with status {True}")
-            return "outcome6"
 
 class PickupState(State):
     def __init__(self, node) -> None:
@@ -246,20 +258,25 @@ class PickupState(State):
         # pickup_point = get_point_XYZ(self.node, self._get_pickup_xyz_client, 2, pickup=True)
 
         #ham
+        if blackboard['current_ingredient'] == "bread_bottom_slice":
+            pickup_point = get_point_XYZ(self.node, self._get_pickup_xyz_client, 3, pickup=True)
+        
         if blackboard['current_ingredient'] == "cheese":
             pickup_point = get_point_XYZ(self.node, self._get_pickup_xyz_client, 2, pickup=True)
 
         
-        elif blackboard['current_ingredient'] == "ham":
+        if blackboard['current_ingredient'] == "ham":
             pickup_point = get_point_XYZ(self.node, self._get_pickup_xyz_client, 1, pickup=True)
+        
+        if blackboard['current_ingredient'] == "bread_top_slice":
+            pickup_point = get_point_XYZ(self.node, self._get_pickup_xyz_client, 3, pickup=True)
+
 
         # destination_x, destination_y, destination_z = pickup_point
         print(pickup_point.x)
-        # time.sleep(5)
         goal_msg.x = pickup_point.x
         goal_msg.y = pickup_point.y
         goal_msg.z = pickup_point.z
-        # goal_msg = pickup_point
         goal_msg.ingredient_type = 1        
 
         result = send_goal(self.node, self._pickup_action_client, goal_msg)
@@ -296,7 +313,7 @@ class PrePlaceState(State):
 
 class PlaceState(State):
     def __init__(self, node) -> None:
-        super().__init__(outcomes=["outcome9"])
+        super().__init__(outcomes=["outcome9", "outcome6"])
         self.node = node
 
         self._place_action_client = ActionClient(self.node, Place, 'snaak_manipulation/place')
@@ -305,20 +322,35 @@ class PlaceState(State):
         yasmin.YASMIN_LOG_INFO("Executing state Place")
         goal_msg = Place.Goal()
 
-        pickup_point = blackboard["bread_center_coordinate"]
-        print(pickup_point.x)
-        print(pickup_point.y)
-        print(pickup_point.z)
+        if blackboard['current_ingredient'] == "bread_bottom_slice":
+            goal_msg.x = blackboard["tray_center_coordinate"]["x"] - 0.07
+            goal_msg.y = blackboard["tray_center_coordinate"]["y"] + 0.07 #for 
+            goal_msg.z = blackboard["tray_center_coordinate"]["z"] + blackboard['ingredient_thickness']
+            goal_msg.ingredient_type = 1
+            result = send_goal(self.node, self._place_action_client, goal_msg)
+            if result == True:
+                yasmin.YASMIN_LOG_INFO("Goal succeeded")
+                return "outcome6"
+            else:
+                yasmin.YASMIN_LOG_ERROR(f"Goal failed with status {True}")
+                return "outcome6"
+        
+        elif blackboard['current_ingredient'] == "bread_top_slice":
+            goal_msg.x = blackboard["tray_center_coordinate"]["x"] + 0.03
+            goal_msg.y = blackboard["tray_center_coordinate"]["y"]+ 0.07
+            goal_msg.z = blackboard["tray_center_coordinate"]["z"] + blackboard['ingredient_thickness']
+            goal_msg.ingredient_type = 1
 
-        # time.sleep(5)
-        goal_msg.x = pickup_point.x
-        goal_msg.y = pickup_point.y
-        goal_msg.z = pickup_point.z + blackboard['ingredient_thickness']
-        # goal_msg = pickup_point
-        goal_msg.ingredient_type = 1        
+        else:
+            pickup_point = blackboard["bread_center_coordinate"]
+            goal_msg.x = pickup_point.x
+            goal_msg.y = pickup_point.y
+            goal_msg.z = pickup_point.z + blackboard['ingredient_thickness']
+            # goal_msg = pickup_point
+            goal_msg.ingredient_type = 1        
 
         result = send_goal(self.node, self._place_action_client, goal_msg)
-        print(result)
+        # print(result)
 
         if result == True:
             yasmin.YASMIN_LOG_INFO("Goal succeeded")
@@ -336,7 +368,7 @@ def main():
 
     set_ros_loggers()
 
-    sm = StateMachine(outcomes=["outcome11"])
+    sm = StateMachine(outcomes=["outcome99"])
 
     sm.add_state(
         "Recipe",
@@ -350,7 +382,7 @@ def main():
         "Home",
         ReturnHomeState(node),
         transitions={
-            "outcome3": "BreadLocalization",
+            "outcome3": "PreGrasp",
         },
     )
 
@@ -368,7 +400,7 @@ def main():
         PreGraspState(node),
         transitions={
             "outcome5": "Pickup",
-            "outcome10": "outcome11",
+            "outcome10": "outcome99",
         },
     )
 
@@ -401,6 +433,7 @@ def main():
         PlaceState(node),
         transitions={
             "outcome9": "PreGrasp",
+            "outcome6": "BreadLocalization",
         },
     )
 
