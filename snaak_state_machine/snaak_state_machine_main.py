@@ -11,6 +11,8 @@ from yasmin_viewer import YasminViewerPub
 from rclpy.action import ActionClient
 from action_msgs.msg import GoalStatus
 from snaak_manipulation.action import ReturnHome, ExecuteTrajectory, Pickup, Place
+from snaak_weight_read.srv import ReadWeight
+
 
 from snaak_vision.srv import GetXYZFromImage
 # from snaak_manipulation.scripts import snaak_manipulation_constants as smck
@@ -66,6 +68,70 @@ def get_point_XYZ(node, service_client, location, pickup):
 
     return result  
 
+def get_weight(node, service_client):
+
+    read_weight = ReadWeight.Request()
+    future = service_client.call_async(read_weight)
+    rclpy.spin_until_future_complete(node, future)
+    result = future.result()
+    
+    ## TO DO ##
+    # define error from weight scale
+
+    yasmin.YASMIN_LOG_INFO(f"weight: {result}")
+
+    return result.weight.data
+
+
+class Restock(State):
+    def __init__(self,node) -> None:
+        super().__init__(["outcome11"])
+        self.node = node
+        self._get_weight_bins = self.node.create_client(ReadWeight, '/snaak_weight_read/snaak_scale_bins/read_weight')
+        self._get_weight_assembly = self.node.create_client(ReadWeight, '/snaak_weight_read/snaak_scale_assembly/read_weight')
+
+    def execute(self, blackboard):
+        yasmin.YASMIN_LOG_INFO("Restocking Mode")
+        file_path = "/home/snaak/Documents/recipe/stock.yaml"
+        blackboard["ingredient_list"] = ["cheese", "ham", "bread"]
+        recipe_data = {}
+
+        for i in blackboard["ingredient_list"]:
+            ## TO DO ##
+            # Add error checking for number of slices
+            pre_weight = get_weight(self.node, self._get_weight_bins)
+            yasmin.YASMIN_LOG_INFO(f"weight before slices {pre_weight}")
+            print(f"start placing slices of {i}")
+            slices = input(f"please input number of slices of {i} places: ")
+            blackboard[f"{i}_slices"] = int(slices) 
+            curr_weight = get_weight(self.node, self._get_weight_bins)
+            yasmin.YASMIN_LOG_INFO(f"weight after slices {curr_weight}")
+            blackboard[f"{i}_weight"] = curr_weight - pre_weight
+            blackboard[f"{i}_weight_per_slice"] = blackboard[f"{i}_weight"] / blackboard[f"{i}_slices"]
+
+            recipe_data[i] = {
+            "slices": blackboard[f"{i}_slices"],
+            "weight": blackboard[f"{i}_weight"],
+            "weight_per_slice": blackboard[f"{i}_weight_per_slice"]
+        }
+
+
+            
+        if os.path.exists(file_path):
+            with open(file_path, 'r') as file:
+                recipe = yaml.safe_load(file)  # Load existing data if file exists
+        else:
+            recipe = {}  # Initialize as an empty dictionary if the file doesn't exist
+
+        # Append the new data to the recipe
+        recipe['ingredients'] = recipe_data
+
+        # Write the updated recipe to the file
+        with open(file_path, 'w') as file:
+            yaml.dump(recipe, file, default_flow_style=False)
+            
+        return "outcome11"
+
 class ReadRecipe(State):
     def __init__(self) -> None:
         super().__init__(["outcome1", "outcome2"])
@@ -76,7 +142,7 @@ class ReadRecipe(State):
         yasmin.YASMIN_LOG_INFO("Reading Recipe")
         time.sleep(1)
         
-        file_path = "/home/snaak/Documents/recipe/cheese.yaml"
+        file_path = "/home/snaak/Documents/recipe/recipe.yaml"
 
         if os.path.exists(file_path):
             with open(file_path, 'r') as file:
@@ -249,7 +315,7 @@ class PickupState(State):
         self._get_pickup_xyz_client = self.node.create_client(GetXYZFromImage, 'snaak_vision/get_pickup_point')
 
     def execute(self, blackboard: Blackboard) -> str:
-        yasmin.YASMIN_LOG_INFO("Executing state PreGrasp")
+        yasmin.YASMIN_LOG_INFO("Executing state PickUp")
         goal_msg = Pickup.Goal()
 
         
@@ -369,6 +435,14 @@ def main():
     set_ros_loggers()
 
     sm = StateMachine(outcomes=["outcome99"])
+
+    sm.add_state(
+        "Restock",
+        Restock(node),
+        transitions={
+            "outcome11": "outcome99",
+        },
+    )
 
     sm.add_state(
         "Recipe",
