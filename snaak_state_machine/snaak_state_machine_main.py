@@ -12,6 +12,7 @@ from rclpy.action import ActionClient
 from action_msgs.msg import GoalStatus
 from snaak_manipulation.action import ReturnHome, ExecuteTrajectory, Pickup, Place
 from snaak_weight_read.srv import ReadWeight
+from std_srvs.srv import Trigger
 
 
 from snaak_vision.srv import GetXYZFromImage
@@ -82,6 +83,20 @@ def get_weight(node, service_client):
 
     return result.weight.data
 
+def disable_arm(node, service_client):
+    disable_req = Trigger.Request()
+    future = service_client.call_async(disable_req)
+    rclpy.spin_until_future_complete(node,future)
+
+    yasmin.YASMIN_LOG_INFO(f"arm disabled")
+
+def enable_arm(node, service_client):
+    enable_req = Trigger.Request()
+    future = service_client.call_async(enable_req)
+    rclpy.spin_until_future_complete(node,future)
+
+    yasmin.YASMIN_LOG_INFO(f"arm enabled")
+
 
 class Restock(State):
     def __init__(self,node) -> None:
@@ -89,12 +104,16 @@ class Restock(State):
         self.node = node
         self._get_weight_bins = self.node.create_client(ReadWeight, '/snaak_weight_read/snaak_scale_bins/read_weight')
         self._get_weight_assembly = self.node.create_client(ReadWeight, '/snaak_weight_read/snaak_scale_assembly/read_weight')
+        self._disable_arm = self.node.create_client(Trigger, 'snaak_manipulation/disable_arm')
+        self._enable_arm = self.node.create_client(Trigger, 'snaak_manipulation/enable_arm')
+
 
     def execute(self, blackboard):
         yasmin.YASMIN_LOG_INFO("Restocking Mode")
         file_path = "/home/snaak/Documents/recipe/stock.yaml"
         blackboard["ingredient_list"] = ["cheese", "ham", "bread"]
         recipe_data = {}
+        disable_arm(self.node, self._disable_arm)
 
         for i in blackboard["ingredient_list"]:
             ## TO DO ##
@@ -129,6 +148,9 @@ class Restock(State):
         # Write the updated recipe to the file
         with open(file_path, 'w') as file:
             yaml.dump(recipe, file, default_flow_style=False)
+        
+        enable_arm(self.node, self._enable_arm)
+
             
         return "outcome11"
 
@@ -440,7 +462,7 @@ def main():
         "Restock",
         Restock(node),
         transitions={
-            "outcome11": "outcome99",
+            "outcome11": "Recipe",
         },
     )
 
