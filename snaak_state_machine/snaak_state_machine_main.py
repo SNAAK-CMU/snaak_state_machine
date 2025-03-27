@@ -235,6 +235,8 @@ class BreadLocalizationState(State):
         result = send_goal(self.node, self._traj_action_client, goal_msg)
 
         print(result)
+        time.sleep(1) #Time delay due to transformation issues
+
         
         pickup_point = get_point_XYZ(self.node, self._get_place_xyz_client, 5, pickup=False)
         blackboard["bread_center_coordinate"] = pickup_point
@@ -346,6 +348,8 @@ class PickupState(State):
         # pickup_point = get_point_XYZ(self.node, self._get_pickup_xyz_client, 2, pickup=True)
 
         #ham
+        time.sleep(1) #Time delay due to transformation issues
+
         if blackboard['current_ingredient'] == "bread_bottom_slice":
             pickup_point = get_point_XYZ(self.node, self._get_pickup_xyz_client, 3, pickup=True)
         
@@ -458,13 +462,13 @@ def main():
 
     sm = StateMachine(outcomes=["outcome99"])
 
-    sm.add_state(
-        "Restock",
-        Restock(node),
-        transitions={
-            "outcome11": "Recipe",
-        },
-    )
+    # sm.add_state(
+    #     "Restock",
+    #     Restock(node),
+    #     transitions={
+    #         "outcome11": "Recipe",
+    #     },
+    # )
 
     sm.add_state(
         "Recipe",
