@@ -97,10 +97,53 @@ def enable_arm(node, service_client):
 
     yasmin.YASMIN_LOG_INFO(f"arm enabled")
 
+class ReadStock(State):
+    def __init__(self, node) -> None:
+        super().__init__(["succeeded", "failed", "restock"])
+        self.node = node
+
+    def execute(self, blackboard):
+        yasmin.YASMIN_LOG_INFO("Reading Stock")
+        file_path = "/home/snaak/Documents/recipe/stock.yaml"
+        
+        # Initialize empty dictionary for ingredients
+        recipe_data = {}
+
+        if os.path.exists(file_path):
+            try:
+                # Load the recipe data from the file
+                with open(file_path, 'r') as file:
+                    recipe = yaml.safe_load(file)
+                    
+                    # Ensure that we have ingredients in the recipe
+                    if 'ingredients' in recipe:
+                        for ingredient, data in recipe['ingredients'].items():
+                            # Place the data in the blackboard for each ingredient
+                            blackboard[f"{ingredient}_slices"] = data['slices']
+                            blackboard[f"{ingredient}_weight"] = data['weight']
+                            blackboard[f"{ingredient}_weight_per_slice"] = data['weight_per_slice']
+                            
+                            # Check if any ingredient has zero slices
+                            if data['slices'] == 0:
+                                yasmin.YASMIN_LOG_ERROR(f"Ingredient {ingredient} has 0 slices, proceeding to re-stock.")
+                                return "restock"
+                        
+                        return "succeeded"
+                    else:
+                        yasmin.YASMIN_LOG_ERROR("No ingredients found in the recipe.")
+                        return "failed"
+
+            except Exception as e:
+                yasmin.YASMIN_LOG_ERROR(f"Error reading the recipe file: {e}")
+                return "failed"
+        
+        else:
+            yasmin.YASMIN_LOG_ERROR(f"Recipe file does not exist: {file_path}")
+            return "failed"
 
 class Restock(State):
     def __init__(self,node) -> None:
-        super().__init__(["outcome11"])
+        super().__init__(["completed"])
         self.node = node
         self._get_weight_bins = self.node.create_client(ReadWeight, '/snaak_weight_read/snaak_scale_bins/read_weight')
         self._get_weight_assembly = self.node.create_client(ReadWeight, '/snaak_weight_read/snaak_scale_assembly/read_weight')
@@ -152,11 +195,11 @@ class Restock(State):
         enable_arm(self.node, self._enable_arm)
 
             
-        return "outcome11"
+        return "completed"
 
 class ReadRecipe(State):
     def __init__(self) -> None:
-        super().__init__(["outcome1", "outcome2"])
+        super().__init__(["loop", "start_recipe"])
         # self.counter = 0
 
 
@@ -189,14 +232,14 @@ class ReadRecipe(State):
                     blackboard["bread_center_coordinate"] = None
                 
             yasmin.YASMIN_LOG_INFO("YAML file found")
-            return "outcome2"
+            return "start_recipe"
         else:
             yasmin.YASMIN_LOG_ERROR("YAML file not found")
-            return "outcome1"
+            return "loop"
 
 class ReturnHomeState(State):
     def __init__(self, node) -> None:
-        super().__init__(outcomes=["outcome3"])
+        super().__init__(outcomes=["succeeded", "failed"])
         self.node = node
         self._reset_arm_client = ActionClient(self.node, ReturnHome, 'snaak_manipulation/return_home')
 
@@ -210,10 +253,10 @@ class ReturnHomeState(State):
         if result == True:
             yasmin.YASMIN_LOG_INFO("Goal succeeded")
             # blackboard["foo_str"] = "home"
-            return "outcome3"
+            return "succeeded"
         else:
             yasmin.YASMIN_LOG_ERROR(f"Goal failed with status {True}")
-            return "outcome3"
+            return "failed"
         
 class BreadLocalizationState(State):
     def __init__(self, node) -> None:
@@ -333,7 +376,7 @@ class PreGraspState(State):
 
 class PickupState(State):
     def __init__(self, node) -> None:
-        super().__init__(outcomes=["outcome7","outcome12","fail"])
+        super().__init__(outcomes=["outcome7","outcome12","failed"])
         self.node = node
 
         self._pickup_action_client = ActionClient(self.node, Pickup, 'snaak_manipulation/pickup')
@@ -376,6 +419,7 @@ class PickupState(State):
 
             if pickup_point == None:
                 retry += 1
+
  
             # destination_x, destination_y, destination_z = pickup_point
             print(pickup_point.x)
@@ -387,7 +431,7 @@ class PickupState(State):
             result = send_goal(self.node, self._pickup_action_client, goal_msg)
             print(result)
 
-            time.sleep(3)
+            time.sleep(3) # Wait for weight scale
 
 
             curr_weight = get_weight(self.node, self._get_weight_bins)
@@ -398,12 +442,19 @@ class PickupState(State):
 
             else:
                 retry = 0
+                if "bread" in blackboard['current_ingredient']:
+                    blackboard["bread_slices"] -= 1
+                else:
+                    blackboard[f"{blackboard['current_ingredient']}_slices"] -= 1
+                # TODO we need to save the updated number of slices to the yaml file
                 break
 
         if retry ==2 and blackboard['current_ingredient'] == "bread_bottom_slice":
-            return "fail"
+            yasmin.YASMIN_LOG_INFO("Aborting task: Failed to identify bread botton slice")
+            return "failed"
         
         if retry ==2:
+            yasmin.YASMIN_LOG_INFO("Fail to pick up "+ blackboard['current_ingredient'] + "moving to the next ingredient") 
             return "outcome12"
 
 
@@ -515,27 +566,39 @@ def main():
 
     sm = StateMachine(outcomes=["outcome99"])
 
-    # sm.add_state(
-    #     "Restock",
-    #     Restock(node),
-    #     transitions={
-    #         "outcome11": "Recipe",
-    #     },
-    # )
+    sm.add_state(
+        "ReadStock",
+        ReadStock(node),
+        transitions={
+            "succeeded": "Recipe",
+            "restock": "Restock",
+            "failed": "Fail", 
+        },
+    )
+
+    sm.add_state(
+        "Restock",
+        Restock(node),
+        transitions={
+            "completed": "Recipe",
+        },
+    )
 
     sm.add_state(
         "Recipe",
         ReadRecipe(),
         transitions={
-            "outcome1": "Recipe",
-            "outcome2": "Home", 
+            "loop": "Recipe",
+            "start_recipe": "Home", 
         },
     )
+
     sm.add_state(
         "Home",
         ReturnHomeState(node),
         transitions={
-            "outcome3": "PreGrasp",
+            "succeeded": "PreGrasp",
+            "failed": "Fail",
         },
     )
 
@@ -571,7 +634,7 @@ def main():
         transitions={
             "outcome7": "PrePlace",
             "outcome12" : "Home",
-            "fail": "Fail",
+            "failed": "Fail",
         },
     )
 
