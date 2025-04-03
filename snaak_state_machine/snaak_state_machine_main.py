@@ -125,20 +125,20 @@ class ReadStock(State):
                             
                             # Check if any ingredient has zero slices
                             if data['slices'] == 0:
-                                yasmin.YASMIN_LOG_ERROR(f"Ingredient {ingredient} has 0 slices, proceeding to re-stock.")
+                                yasmin.YASMIN_LOG_INFO(f"Ingredient {ingredient} has 0 slices, proceeding to re-stock.")
                                 return "restock"
                         
                         return "succeeded"
                     else:
-                        yasmin.YASMIN_LOG_ERROR("No ingredients found in the recipe.")
+                        yasmin.YASMIN_LOG_INFO("No ingredients found in the recipe.")
                         return "failed"
 
             except Exception as e:
-                yasmin.YASMIN_LOG_ERROR(f"Error reading the recipe file: {e}")
+                yasmin.YASMIN_LOG_INFO(f"Error reading the recipe file: {e}")
                 return "failed"
         
         else:
-            yasmin.YASMIN_LOG_ERROR(f"Recipe file does not exist: {file_path}")
+            yasmin.YASMIN_LOG_INFO(f"Recipe file does not exist: {file_path}")
             return "failed"
 
 class Restock(State):
@@ -225,7 +225,10 @@ class ReadRecipe(State):
 
                 # (x=0.47050124406814575, y=-0.016270264983177185, z=0.2627856433391571)
 
-                blackboard["tray_center_coordinate"] = {"x":0.47050124406814575, "y":-0.016270264983177185, "z":0.2627856433391571}
+                # blackboard["tray_center_coordinate"] = {"x":0.47050124406814575, "y":-0.016270264983177185, "z":0.2627856433391571}
+
+                blackboard["tray_center_coordinate"] = {"x":0.48, "y":0.0, "z":0.24}
+
 
                 blackboard['ingredient_thickness'] = 0
                 if "bread_center_coordinate" not in blackboard:
@@ -234,8 +237,8 @@ class ReadRecipe(State):
             yasmin.YASMIN_LOG_INFO("YAML file found")
             return "start_recipe"
         else:
-            yasmin.YASMIN_LOG_ERROR("YAML file not found")
-            return "loop"
+            yasmin.YASMIN_LOG_INFO("YAML file not found")
+            return "` `"
 
 class ReturnHomeState(State):
     def __init__(self, node) -> None:
@@ -255,12 +258,12 @@ class ReturnHomeState(State):
             # blackboard["foo_str"] = "home"
             return "succeeded"
         else:
-            yasmin.YASMIN_LOG_ERROR(f"Goal failed with status {True}")
+            yasmin.YASMIN_LOG_INFO(f"Goal failed with status {True}")
             return "failed"
         
 class BreadLocalizationState(State):
     def __init__(self, node) -> None:
-        super().__init__(outcomes=["outcome4"])
+        super().__init__(outcomes=["succeeded", "failed"])
         self.node = node
 
         self._traj_action_client = ActionClient(self.node, ExecuteTrajectory, 'snaak_manipulation/execute_trajectory')
@@ -269,9 +272,9 @@ class BreadLocalizationState(State):
 
     def execute(self, blackboard: Blackboard) -> str:
         yasmin.YASMIN_LOG_INFO("Executing state PreGrasp")
-        if blackboard["bread_center_coordinate"] is not None:
-            yasmin.YASMIN_LOG_INFO("Bread already localized")
-            return "outcome4"
+        # if blackboard["bread_center_coordinate"] is not None:
+        #     yasmin.YASMIN_LOG_INFO("Bread already localized")
+        #     return "succeeded"
 
         goal_msg = ExecuteTrajectory.Goal()
         
@@ -279,7 +282,9 @@ class BreadLocalizationState(State):
         result = send_goal(self.node, self._traj_action_client, goal_msg)
 
         print(result)
-        time.sleep(1) #Time delay due to transformation issues
+        time.sleep(2) #Time delay due to transformation issues
+
+        # TODO Attempt the bread localization for X times
 
         
         pickup_point = get_point_XYZ(self.node, self._get_place_xyz_client, 5, pickup=False)
@@ -288,14 +293,14 @@ class BreadLocalizationState(State):
         
         if result == True:
             yasmin.YASMIN_LOG_INFO("Goal succeeded")
-            return "outcome4"
+            return "succeeded"
         else:
-            yasmin.YASMIN_LOG_ERROR(f"Goal failed with status {True}")
-            return "outcome4"
+            yasmin.YASMIN_LOG_INFO(f"Bread Localization Fail")
+            return "failed"
         
 class PreGraspState(State):
     def __init__(self, node) -> None:
-        super().__init__(outcomes=["outcome5",  "outcome10"])
+        super().__init__(outcomes=["succeeded",  "finished", "failed"])
         self.node = node
 
         self._traj_action_client = ActionClient(self.node, ExecuteTrajectory, 'snaak_manipulation/execute_trajectory')
@@ -310,35 +315,35 @@ class PreGraspState(State):
         #ham
         if blackboard["bread_bottom_slice"] == False : 
             blackboard["bread_bottom_slice"] = True
-            blackboard['ingredient_thickness'] += 0.005
+            # blackboard['ingredient_thickness'] += 0.005
             blackboard["current_ingredient"] = "bread_bottom_slice"
             goal_msg.desired_location = "bin3"
             yasmin.YASMIN_LOG_INFO("bread bottom slice position")
             result = send_goal(self.node, self._traj_action_client, goal_msg)
             if result == True:
                 yasmin.YASMIN_LOG_INFO("Goal succeeded")
-                return "outcome5"
+                return "succeeded"
             else:
-                yasmin.YASMIN_LOG_ERROR(f"Goal failed with status {True}")
-                return "outcome5"
+                yasmin.YASMIN_LOG_INFO(f"Goal failed with status {True}")
+                return "failed"
 
         if blackboard["bread_top_slice"] == False and blackboard["cheese"] <= 0 and blackboard["ham"] <= 0:
             blackboard["bread_top_slice"] = True
-            blackboard['ingredient_thickness'] += 0.005
+            # blackboard['ingredient_thickness'] += 0.005
             blackboard["current_ingredient"] = "bread_top_slice"
             goal_msg.desired_location = "bin3"
             yasmin.YASMIN_LOG_INFO("bread top slice position")
             result = send_goal(self.node, self._traj_action_client, goal_msg)
             if result == True:
                 yasmin.YASMIN_LOG_INFO("Goal succeeded")
-                return "outcome5"
+                return "succeeded"
             else:
-                yasmin.YASMIN_LOG_ERROR(f"Goal failed with status {True}")
-                return "outcome5"
+                yasmin.YASMIN_LOG_INFO(f"Goal failed with status {True}")
+                return "failed"
 
         if blackboard["cheese"] > 0:
             blackboard["cheese"] -= 1
-            blackboard['ingredient_thickness'] += 0.005
+            # blackboard['ingredient_thickness'] += 0.005
             blackboard['current_ingredient'] = "cheese"
             goal_msg.desired_location = "bin2"
             yasmin.YASMIN_LOG_INFO("cheese position")
@@ -346,14 +351,14 @@ class PreGraspState(State):
             if result == True:
 
                 yasmin.YASMIN_LOG_INFO("Goal succeeded")
-                return "outcome5"
+                return "succeeded"
             else:
-                yasmin.YASMIN_LOG_ERROR(f"Goal failed with status {True}")
-                return "outcome5"
+                yasmin.YASMIN_LOG_INFO(f"Goal failed with status {True}")
+                return "failed"
 
         if blackboard["ham"] > 0:
             blackboard["ham"] -= 1
-            blackboard['ingredient_thickness'] += 0.005
+            # blackboard['ingredient_thickness'] += 0.005
             blackboard['current_ingredient'] = "ham"
             goal_msg.desired_location = "bin1"
             yasmin.YASMIN_LOG_INFO("ham position")
@@ -361,27 +366,24 @@ class PreGraspState(State):
 
             if result == True:
                 yasmin.YASMIN_LOG_INFO("Goal succeeded")
-                return "outcome5"
+                return "succeeded"
             else:
-                yasmin.YASMIN_LOG_ERROR(f"Goal failed with status {True}")
-                return "outcome5"
+                yasmin.YASMIN_LOG_INFO(f"Goal failed with status {True}")
+                return "failed"
             
 
-        return "outcome10"
-
-
-        
-        # result = send_goal(self.node, self._traj_action_client, goal_msg)
+        return "finished"
 
 
 class PickupState(State):
     def __init__(self, node) -> None:
-        super().__init__(outcomes=["outcome7","outcome12","failed"])
+        super().__init__(outcomes=["succeeded","next_ingredient","failed"])
         self.node = node
 
         self._pickup_action_client = ActionClient(self.node, Pickup, 'snaak_manipulation/pickup')
         self._get_pickup_xyz_client = self.node.create_client(GetXYZFromImage, 'snaak_vision/get_pickup_point')
         self._get_weight_bins = self.node.create_client(ReadWeight, '/snaak_weight_read/snaak_scale_bins/read_weight')
+        self._reset_arm_client = ActionClient(self.node, ReturnHome, 'snaak_manipulation/return_home')
 
     def execute(self, blackboard: Blackboard) -> str:
         yasmin.YASMIN_LOG_INFO("Executing state PickUp")
@@ -392,7 +394,7 @@ class PickupState(State):
 
         retry = 0  
 
-        time.sleep(1) #Time delay due to transformation issues
+        time.sleep(2) #Time delay due to transformation issues
 
         while retry<2: # change this to try more pick ups
 
@@ -419,7 +421,7 @@ class PickupState(State):
 
             if pickup_point == None:
                 retry += 1
-
+                continue
  
             # destination_x, destination_y, destination_z = pickup_point
             print(pickup_point.x)
@@ -431,14 +433,17 @@ class PickupState(State):
             result = send_goal(self.node, self._pickup_action_client, goal_msg)
             print(result)
 
-            time.sleep(3) # Wait for weight scale
+            time.sleep(1) # Wait for weight scale
 
 
             curr_weight = get_weight(self.node, self._get_weight_bins)
             print(curr_weight)
 
+            print(f"Delta in placement weight {pre_weight-curr_weight}")
             if pre_weight-curr_weight <= 4.0:
+                # TODO Disable vaccum
                 retry += 1
+                continue
 
             else:
                 retry = 0
@@ -446,28 +451,39 @@ class PickupState(State):
                     blackboard["bread_slices"] -= 1
                 else:
                     blackboard[f"{blackboard['current_ingredient']}_slices"] -= 1
-                # TODO we need to save the updated number of slices to the yaml file
+                    # TODO we need to save the updated number of slices to the yaml file
                 break
 
         if retry ==2 and blackboard['current_ingredient'] == "bread_bottom_slice":
             yasmin.YASMIN_LOG_INFO("Aborting task: Failed to identify bread botton slice")
             return "failed"
-        
+
         if retry ==2:
             yasmin.YASMIN_LOG_INFO("Fail to pick up "+ blackboard['current_ingredient'] + "moving to the next ingredient") 
-            return "outcome12"
+            goal_msg = ReturnHome.Goal()
+            result = send_goal(self.node, self._reset_arm_client, goal_msg)
+            # Home
+            if result == True:
+                yasmin.YASMIN_LOG_INFO("Goal succeeded")
+                # blackboard["foo_str"] = "home"
+                return "next_ingredient"
+            else:
+                yasmin.YASMIN_LOG_INFO(f"Goal failed with status {True}")
+                return "failed"
+
 
 
         if result == True:
             yasmin.YASMIN_LOG_INFO("Goal succeeded")
-            return "outcome7"
+            blackboard['ingredient_thickness'] += 0.003
+            return "succeeded"
         else:
-            yasmin.YASMIN_LOG_ERROR(f"Goal failed with status {True}")
-            return "outcome7"
+            yasmin.YASMIN_LOG_INFO(f"Goal failed with status {True}")
+            return "failed"
 
 class PrePlaceState(State):
     def __init__(self, node) -> None:
-        super().__init__(outcomes=["outcome8"])
+        super().__init__(outcomes=["succeeded", "failed"])
         self.node = node
 
         self._traj_action_client = ActionClient(self.node, ExecuteTrajectory, 'snaak_manipulation/execute_trajectory')
@@ -482,58 +498,83 @@ class PrePlaceState(State):
 
         if result == True:
             yasmin.YASMIN_LOG_INFO("Goal succeeded")
-            return "outcome8"
+            return "succeeded"
         else:
-            yasmin.YASMIN_LOG_ERROR(f"Goal failed with status {True}")
-            return "outcome8"
+            yasmin.YASMIN_LOG_INFO(f"Goal failed with status {True}")
+            return "failed"
 
 class PlaceState(State):
     def __init__(self, node) -> None:
-        super().__init__(outcomes=["outcome9", "outcome6"])
+        super().__init__(outcomes=["succeeded", "bread_localize", "retry", "failed"])
         self.node = node
 
         self._place_action_client = ActionClient(self.node, Place, 'snaak_manipulation/place')
+        self._get_weight_assembly = self.node.create_client(ReadWeight, '/snaak_weight_read/snaak_scale_assembly/read_weight')
+
 
     def execute(self, blackboard: Blackboard) -> str:
         yasmin.YASMIN_LOG_INFO("Executing state Place")
         goal_msg = Place.Goal()
 
+        pre_weight = get_weight(self.node, self._get_weight_assembly)
+        print(pre_weight)
+
         if blackboard['current_ingredient'] == "bread_bottom_slice":
-            goal_msg.x = blackboard["tray_center_coordinate"]["x"] - 0.07
+            goal_msg.x = blackboard["tray_center_coordinate"]["x"] - 0.06
             goal_msg.y = blackboard["tray_center_coordinate"]["y"] + 0.07 #for 
-            goal_msg.z = blackboard["tray_center_coordinate"]["z"] + blackboard['ingredient_thickness']
+            goal_msg.z = blackboard["tray_center_coordinate"]["z"] #+ blackboard['ingredient_thickness']
             goal_msg.ingredient_type = 1
             result = send_goal(self.node, self._place_action_client, goal_msg)
             if result == True:
+                #TODO add more retries
                 yasmin.YASMIN_LOG_INFO("Goal succeeded")
-                return "outcome6"
+                return "bread_localize"
             else:
-                yasmin.YASMIN_LOG_ERROR(f"Goal failed with status {True}")
-                return "outcome6"
+                yasmin.YASMIN_LOG_INFO(f"Goal failed with status {True}")
+                return "failed"
         
         elif blackboard['current_ingredient'] == "bread_top_slice":
-            goal_msg.x = blackboard["tray_center_coordinate"]["x"] + 0.03
+            goal_msg.x = blackboard["tray_center_coordinate"]["x"] + 0.06
             goal_msg.y = blackboard["tray_center_coordinate"]["y"]+ 0.07
-            goal_msg.z = blackboard["tray_center_coordinate"]["z"] + blackboard['ingredient_thickness']
+            goal_msg.z = blackboard["tray_center_coordinate"]["z"] #+ blackboard['ingredient_thickness']
             goal_msg.ingredient_type = 1
 
         else:
             pickup_point = blackboard["bread_center_coordinate"]
             goal_msg.x = pickup_point.x
             goal_msg.y = pickup_point.y
-            goal_msg.z = pickup_point.z + blackboard['ingredient_thickness']
+            goal_msg.z = pickup_point.z #+ blackboard['ingredient_thickness']
+
+            print(f"Ingredient Drop height {goal_msg.z}")
             # goal_msg = pickup_point
-            goal_msg.ingredient_type = 1        
+            goal_msg.ingredient_type = 1       
 
         result = send_goal(self.node, self._place_action_client, goal_msg)
         # print(result)
 
+        # Time delay for the weight scale
+        time.sleep(1)
+
+
+        curr_weight =  get_weight(self.node, self._get_weight_assembly)
+        
+        print(f"weight_delta: {curr_weight-pre_weight}")
+        if curr_weight - pre_weight < 5:
+            if blackboard["current_ingredient"] == 'bread_top_slice'  or blackboard["current_ingredient"] == 'bread_bottom _slice':
+                blackboard[blackboard["current_ingredient"]] = False
+            
+            else:
+                blackboard[blackboard["current_ingredient"]] += 1
+
+            # TODO add flag that doesn't let you retry again
+            return "retry"
+
         if result == True:
             yasmin.YASMIN_LOG_INFO("Goal succeeded")
-            return "outcome9"
+            return "succeeded"
         else:
-            yasmin.YASMIN_LOG_ERROR(f"Goal failed with status {True}")
-            return "outcome9"
+            yasmin.YASMIN_LOG_INFO(f"Goal failed with status {True}")
+            return "failed"
         
 
 
@@ -552,7 +593,7 @@ class FailState(State):
             yasmin.YASMIN_LOG_INFO("Goal succeeded")
             return "loop"
         else:
-            yasmin.YASMIN_LOG_ERROR("Invalid input in Fail State")
+            yasmin.YASMIN_LOG_INFO("Invalid input in Fail State")
             return "loop"  # Default to "check" to avoid returning None
 
 
@@ -570,7 +611,7 @@ def main():
         "ReadStock",
         ReadStock(node),
         transitions={
-            "succeeded": "Recipe",
+            "succeeded": "Home",
             "restock": "Restock",
             "failed": "Fail", 
         },
@@ -580,7 +621,7 @@ def main():
         "Restock",
         Restock(node),
         transitions={
-            "completed": "Recipe",
+            "completed": "Home",
         },
     )
 
@@ -589,7 +630,7 @@ def main():
         ReadRecipe(),
         transitions={
             "loop": "Recipe",
-            "start_recipe": "Home", 
+            "start_recipe": "PreGrasp",  # "Home" 
         },
     )
 
@@ -597,7 +638,7 @@ def main():
         "Home",
         ReturnHomeState(node),
         transitions={
-            "succeeded": "PreGrasp",
+            "succeeded": "Recipe", # "PreGrasp"
             "failed": "Fail",
         },
     )
@@ -606,7 +647,8 @@ def main():
         "BreadLocalization",
         BreadLocalizationState(node),
         transitions={
-            "outcome4": "PreGrasp",
+            "succeeded": "PreGrasp",
+            "failed": "Fail",
         },
     )
 
@@ -615,8 +657,9 @@ def main():
         "PreGrasp",
         PreGraspState(node),
         transitions={
-            "outcome5": "Pickup",
-            "outcome10": "Recipe",
+            "succeeded": "Pickup",
+            "finished": "Home", # "Recipe"
+            "failed": "Fail",
         },
     )
 
@@ -632,8 +675,8 @@ def main():
         "Pickup",
         PickupState(node),
         transitions={
-            "outcome7": "PrePlace",
-            "outcome12" : "Home",
+            "succeeded": "PrePlace",
+            "next_ingredient" : "PreGrasp",  # "Home"
             "failed": "Fail",
         },
     )
@@ -642,7 +685,8 @@ def main():
         "PrePlace",
         PrePlaceState(node),
         transitions={
-            "outcome8": "Place",
+            "succeeded": "Place",
+            "failed": "Fail",
         },
     )
 
@@ -650,8 +694,10 @@ def main():
         "Place",
         PlaceState(node),
         transitions={
-            "outcome9": "PreGrasp",
-            "outcome6": "BreadLocalization",
+            "succeeded": "PreGrasp",
+            "bread_localize": "BreadLocalization",
+            "retry": "PreGrasp",
+            "failed": "Fail",
         },
     )
 
