@@ -12,4 +12,6 @@ if [ "$1" == "--start-frankapy" ]; then
 fi
 
 source manipulation_ws/install/setup.bash
-ros2 launch snaak_state_machine snaak_state_machine_launch.py
+
+gnome-terminal -- bash -c "ros2 launch snaak_state_machine_dependencies_launch.py; exec bash"
+gnome-terminal -- bash -c "ros2 run snaak_state_machine snaak_state_machine_main; exec bash"
