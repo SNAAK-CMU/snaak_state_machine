@@ -15,7 +15,7 @@ from snaak_weight_read.srv import ReadWeight
 from std_srvs.srv import Trigger
 
 
-from snaak_vision.srv import GetXYZFromImage, CheckIngredientPlace
+from snaak_vision.srv import GetXYZFromImage, CheckIngredientPlace, GetDepthAtPoint
 # from snaak_manipulation.scripts import snaak_manipulation_constants as smck
 
 def send_goal(node, action_client: ActionClient, action_goal):
@@ -68,6 +68,23 @@ def get_point_XYZ(node, service_client, location, pickup):
     yasmin.YASMIN_LOG_INFO(f"Result from Vision Node: {result.x}, {result.y}, {result.z}")
 
     return result  
+
+def get_depth(node, service_client, x, y):
+    depthRequest = GetDepthAtPoint.Request()
+    depthRequest.x = x
+    depthRequest.y = y
+
+    future = service_client.call_async(depthRequest)
+    rclpy.spin_until_future_complete(node, future)
+    result = future.result()
+
+    if (result == None):
+        yasmin.YASMIN_LOG_INFO("Unable to Get Depth from Vision Node")
+        return None
+
+    yasmin.YASMIN_LOG_INFO(f"Result from Vision Node: {result.depth}")
+
+    return result.depth
 
 def get_weight(node, service_client):
 
@@ -417,9 +434,11 @@ class PickupState(State):
 
         self._pickup_action_client = ActionClient(self.node, Pickup, 'snaak_manipulation/pickup')
         self._get_pickup_xyz_client = self.node.create_client(GetXYZFromImage, 'snaak_vision/get_pickup_point')
+        self._get_depth_client = self.node.create_client(GetDepthAtPoint, 'snaak_vision/get_depth_at_point')
         self._get_weight_bins = self.node.create_client(ReadWeight, '/snaak_weight_read/snaak_scale_bins/read_weight')
         self._reset_arm_client = ActionClient(self.node, ReturnHome, 'snaak_manipulation/return_home')
         self._disable_vacuum_client = self.node.create_client(Trigger, '/snaak_pneumatic/disable_vacuum')
+
 
     def execute(self, blackboard: Blackboard) -> str:
         yasmin.YASMIN_LOG_INFO("Executing state PickUp")
@@ -438,8 +457,19 @@ class PickupState(State):
 
             if blackboard['current_ingredient'] == "bread_bottom_slice":
                 ingredient_number = 3
-                # pickup_point = get_point_XYZ(self.node, self._get_pickup_xyz_client, 3, pickup=True)
-            
+                # # pickup_point = get_point_XYZ(self.node, self._get_pickup_xyz_client, 3, pickup=True)
+                # bread_x = 450
+                # bread_y = 215
+                # depth = get_depth(self.node, self._get_depth_client, bread_x, bread_y)
+                # # form a pickup point with the depth and bread x and y position
+                # pickup_point = GetXYZFromImage.Response()
+                # pickup_point.x = 0.24653074145317078 
+                # pickup_point.y = -0.30509087443351746
+                # print(depth)
+                # pickup_point.z = 0.27-0.04
+                # # print the pickup point
+                # print(f"Pickup point for bread: {pickup_point.x}, {pickup_point.y}, {pickup_point.z}")
+
             if blackboard['current_ingredient'] == "cheese":
                 ingredient_number = 2
                 # pickup_point = get_point_XYZ(self.node, self._get_pickup_xyz_client, 2, pickup=True)
@@ -450,8 +480,14 @@ class PickupState(State):
             
             if blackboard['current_ingredient'] == "bread_top_slice":
                 ingredient_number = 3
-                # pickup_point = get_point_XYZ(self.node, self._get_pickup_xyz_client, 3, pickup=True)
-
+                # bread_x = 450
+                # bread_y = 215
+                # depth = get_depth(self.node, self._get_depth_client, bread_x, bread_y)
+                # # form a pickup point with the depth and bread x and y position
+                # pickup_point = GetXYZFromImage.Response()
+                # pickup_point.x = 0.24653074145317078 
+                # pickup_point.y = -0.30509087443351746
+                # pickup_point.z = depth
 
             pickup_point = get_point_XYZ(self.node, self._get_pickup_xyz_client, ingredient_number, pickup=True)
 
@@ -562,15 +598,15 @@ class PlaceState(State):
         print(pre_weight)
 
         if blackboard['current_ingredient'] == "bread_bottom_slice":
-            goal_msg.x = blackboard["tray_center_coordinate"]["x"] - 0.06
-            goal_msg.y = blackboard["tray_center_coordinate"]["y"] + 0.07 #for 
+            goal_msg.x = blackboard["tray_center_coordinate"]["x"] #- 0.06
+            goal_msg.y = blackboard["tray_center_coordinate"]["y"] - 0.07 #for 
             goal_msg.z = blackboard["tray_center_coordinate"]["z"] #+ blackboard['ingredient_thickness']
             goal_msg.ingredient_type = 1
             # result = send_goal(self.node, self._place_action_client, goal_msg)
         
         elif blackboard['current_ingredient'] == "bread_top_slice":
-            goal_msg.x = blackboard["tray_center_coordinate"]["x"] + 0.06
-            goal_msg.y = blackboard["tray_center_coordinate"]["y"]+ 0.07
+            goal_msg.x = blackboard["tray_center_coordinate"]["x"] #+ 0.06
+            goal_msg.y = blackboard["tray_center_coordinate"]["y"] - 0.07
             goal_msg.z = blackboard["tray_center_coordinate"]["z"] #+ blackboard['ingredient_thickness']
             goal_msg.ingredient_type = 1
 
