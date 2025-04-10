@@ -16,10 +16,21 @@ from std_srvs.srv import Trigger
 
 
 from snaak_vision.srv import GetXYZFromImage, CheckIngredientPlace, GetDepthAtPoint
-# from snaak_manipulation.scripts import snaak_manipulation_constants as smck
 
 def send_goal(node, action_client: ActionClient, action_goal):
-    """Helper function to send a goal and handle the result"""
+    """
+    Sends a goal to an action server and waits for the result.
+    This function sends a goal to the specified action server using the provided
+    action client and waits for the server to process the goal. It returns whether
+    the goal was successfully achieved.
+    Args:
+        node: The ROS 2 node instance used for logging and spinning.
+        action_client (ActionClient): The action client used to communicate with the action server. 
+        action_goal: The goal to be sent to the action server.
+    Returns:
+        bool: True if the goal was successfully achieved (STATUS_SUCCEEDED), False otherwise.
+    """
+    
     action_client.wait_for_server()
     
     send_goal_future = action_client.send_goal_async(action_goal)
@@ -42,11 +53,25 @@ def send_goal(node, action_client: ActionClient, action_goal):
         return False  
 
 def get_point_XYZ(node, service_client, location, pickup):
+    """
+    Retrieves the XYZ coordinates of a specified location using a vision service.
+    This function sends a request to a vision service to obtain the XYZ coordinates
+    of a given location. It handles both pickup and non-pickup scenarios and performs
+    error checking on the returned coordinates.
+    Args:
+        node (rclpy.node.Node): The ROS 2 node instance used for spinning and logging.
+        service_client (rclpy.client.Client): The service client used to call the vision service.
+        location (int): The ID of the location for which the XYZ coordinates are requested.
+        pickup (bool): A flag indicating whether the request is for a pickup operation.
+    Returns:
+        result (GetXYZFromImage.Response or None): The response from the vision service containing
+        the XYZ coordinates. Returns `None` if the coordinates are invalid or if the depth
+        information is unavailable.
+    """
 
     coordRequest = GetXYZFromImage.Request()
-    # coordRequest.location_id = int(location[-1])
-    #changing this to make it easier to pass values, unify data types between vision and manipulation for bin locations
 
+    #changing this to make it easier to pass values, unify data types between vision and manipulation for bin locations
     coordRequest.location_id = int(location)
 
     coordRequest.timestamp = 1.0 # change this to current time for sync
@@ -61,8 +86,12 @@ def get_point_XYZ(node, service_client, location, pickup):
         rclpy.spin_until_future_complete(node, future)
         result = future.result()
 
-    if (result == None):
+    if (result.x == -1 or result.y == -1 or result.z == None):
         yasmin.YASMIN_LOG_INFO("Unable to Get XYZ from Vision Node")
+        return None
+    
+    elif result.z == -1:
+        yasmin.YASMIN_LOG_INFO("Unable to get Depth")
         return None
 
     yasmin.YASMIN_LOG_INFO(f"Result from Vision Node: {result.x}, {result.y}, {result.z}")
@@ -93,7 +122,7 @@ def get_weight(node, service_client):
     rclpy.spin_until_future_complete(node, future)
     result = future.result()
     
-    ## TO DO ##
+    #TODO: add error checking for the result
     # define error from weight scale
 
     yasmin.YASMIN_LOG_INFO(f"weight: {result}")
@@ -131,6 +160,13 @@ def disable_vacuum(node, service_client):
     rclpy.spin_until_future_complete(node,future)
 
     yasmin.YASMIN_LOG_INFO(f"vacuum disabled")
+
+def reset_sandwich_checker(node, service_client):
+    reset_sandwich = Trigger.Request()
+    future = service_client.call_async(reset_sandwich)
+    rclpy.spin_until_future_complete(node,future)
+
+    yasmin.YASMIN_LOG_INFO(f"reset sandwich checker")
 
 class ReadStock(State):
     def __init__(self, node) -> None:
@@ -202,7 +238,6 @@ class Restock(State):
             pre_weight = get_weight(self.node, self._get_weight_bins)
             yasmin.YASMIN_LOG_INFO(f"weight before slices {pre_weight}")
             print(f"start placing slices of {i}")
-            # Do a check to see if slices are a number and if it isin't than prompt the user to enter a number between 1 and 100
             slices = None
             while not isinstance(slices, int):
                 try:
@@ -247,8 +282,11 @@ class Restock(State):
         return "completed"
 
 class ReadRecipe(State):
-    def __init__(self) -> None:
+    def __init__(self,node) -> None:
         super().__init__(["loop", "start_recipe","restock"])
+        self.node = node
+        self.reset_sandwich_checker_client = self.node.create_client(Trigger, '/snaak_vision/reset_sandwich_checker')
+
         # self.counter = 0
 
 
@@ -277,13 +315,16 @@ class ReadRecipe(State):
                     blackboard["bread_top_slice"] = False
                     blackboard["bread_bottom_slice"] = False
 
-                    blackboard["tray_center_coordinate"] = {"x":0.48, "y":0.0, "z":0.24}
+                    blackboard["tray_center_coordinate"] = {"x":0.48, "y":0.0, "z":0.29} #"z":0.24
 
                     blackboard['ingredient_thickness'] = 0
+
                     if "bread_center_coordinate" not in blackboard:
                         blackboard["bread_center_coordinate"] = None
-                    
+
                 yasmin.YASMIN_LOG_INFO("YAML file found")
+                reset_sandwich_checker(self.node, self.reset_sandwich_checker_client)
+                yasmin.YASMIN_LOG_INFO("Resetting sandwich checker")    
                 return "start_recipe"
             else:
                 yasmin.YASMIN_LOG_INFO("YAML file not found")
@@ -337,18 +378,20 @@ class BreadLocalizationState(State):
         time.sleep(2) #Time delay due to transformation issues
 
         # TODO Attempt the bread localization for X times
+        retries = 2
 
-        
-        pickup_point = get_point_XYZ(self.node, self._get_place_xyz_client, 5, pickup=False)
-        blackboard["bread_center_coordinate"] = pickup_point
-        print(pickup_point)
-        
-        if result == True:
-            yasmin.YASMIN_LOG_INFO("Goal succeeded")
-            return "succeeded"
-        else:
-            yasmin.YASMIN_LOG_INFO(f"Bread Localization Fail")
-            return "failed"
+        for i in range(retries):
+            retries -= 1
+            pickup_point = get_point_XYZ(self.node, self._get_place_xyz_client, 5, pickup=False)
+            blackboard["bread_center_coordinate"] = pickup_point
+            print(pickup_point)
+            
+            if result == True:
+                yasmin.YASMIN_LOG_INFO("Goal succeeded")
+                return "succeeded"
+
+        yasmin.YASMIN_LOG_INFO(f"Bread Localization Fail")
+        return "failed"
         
 class PreGraspState(State):
     def __init__(self, node) -> None:
@@ -442,59 +485,57 @@ class PickupState(State):
 
     def execute(self, blackboard: Blackboard) -> str:
         yasmin.YASMIN_LOG_INFO("Executing state PickUp")
-
-
-        
         goal_msg = Pickup.Goal()
-
-        retry_pickup = 0  
-
+        retry_pickup = 1 
         time.sleep(2) #Time delay due to transformation issues
+        pickup_tries = 3
 
-        while retry_pickup<2: # change this to try more pick ups
+        while retry_pickup <= pickup_tries: # change this to try more pick ups
 
             pre_weight = get_weight(self.node, self._get_weight_bins)
 
             if blackboard['current_ingredient'] == "bread_bottom_slice":
                 ingredient_number = 3
-                # # pickup_point = get_point_XYZ(self.node, self._get_pickup_xyz_client, 3, pickup=True)
-                # bread_x = 450
-                # bread_y = 215
-                # depth = get_depth(self.node, self._get_depth_client, bread_x, bread_y)
-                # # form a pickup point with the depth and bread x and y position
-                # pickup_point = GetXYZFromImage.Response()
-                # pickup_point.x = 0.24653074145317078 
-                # pickup_point.y = -0.30509087443351746
-                # print(depth)
-                # pickup_point.z = 0.27-0.04
-                # # print the pickup point
-                # print(f"Pickup point for bread: {pickup_point.x}, {pickup_point.y}, {pickup_point.z}")
 
             if blackboard['current_ingredient'] == "cheese":
                 ingredient_number = 2
-                # pickup_point = get_point_XYZ(self.node, self._get_pickup_xyz_client, 2, pickup=True)
             
             if blackboard['current_ingredient'] == "ham":
                 ingredient_number = 1
-                # pickup_point = get_point_XYZ(self.node, self._get_pickup_xyz_client, 1, pickup=True)
             
             if blackboard['current_ingredient'] == "bread_top_slice":
                 ingredient_number = 3
-                # bread_x = 450
-                # bread_y = 215
-                # depth = get_depth(self.node, self._get_depth_client, bread_x, bread_y)
-                # # form a pickup point with the depth and bread x and y position
-                # pickup_point = GetXYZFromImage.Response()
-                # pickup_point.x = 0.24653074145317078 
-                # pickup_point.y = -0.30509087443351746
-                # pickup_point.z = depth
 
             pickup_point = get_point_XYZ(self.node, self._get_pickup_xyz_client, ingredient_number, pickup=True)
+            print('##########################')
+            print(pickup_point)
+            print('##########################')
 
             if pickup_point == None:
                 retry_pickup += 1
-                continue
  
+            if retry_pickup == pickup_tries and blackboard['current_ingredient'] == "bread_bottom_slice":
+                yasmin.YASMIN_LOG_INFO("Aborting task: Failed to identify bread botton slice")
+                return "failed"
+
+            if retry_pickup == pickup_tries:
+                yasmin.YASMIN_LOG_INFO("Fail to pick up "+ blackboard['current_ingredient'] + "moving to the next ingredient") 
+                goal_msg = ReturnHome.Goal()
+                result = send_goal(self.node, self._reset_arm_client, goal_msg)
+                # Home
+                if result == True:
+                    yasmin.YASMIN_LOG_INFO("Goal succeeded")
+                    # blackboard["foo_str"] = "home"
+                    # TODO add a flag that denotes that you have not successfully picked up an igredient and tag the sandiwch as a failure
+                    return "next_ingredient"
+                else:
+                    yasmin.YASMIN_LOG_INFO(f"Goal failed with status {True}")
+                    return "failed"
+
+            if pickup_point == None:
+                continue
+
+
             # destination_x, destination_y, destination_z = pickup_point
             print(pickup_point.x)
             goal_msg.x = pickup_point.x
@@ -507,10 +548,7 @@ class PickupState(State):
 
             time.sleep(1) # Wait for weight scale
 
-
             curr_weight = get_weight(self.node, self._get_weight_bins)
-            print(curr_weight)
-
             print(f"Delta in placement weight {pre_weight-curr_weight}")
             if pre_weight-curr_weight <= 4.0:
 
@@ -528,35 +566,15 @@ class PickupState(State):
                 else:
                     blackboard[f"{blackboard['current_ingredient']}_slices"] -= 1
                     # TODO we need to save the updated number of slices to the yaml file
-                break
 
-        if retry_pickup ==2 and blackboard['current_ingredient'] == "bread_bottom_slice":
-            yasmin.YASMIN_LOG_INFO("Aborting task: Failed to identify bread botton slice")
-            return "failed"
-
-        if retry_pickup ==2:
-            yasmin.YASMIN_LOG_INFO("Fail to pick up "+ blackboard['current_ingredient'] + "moving to the next ingredient") 
-            goal_msg = ReturnHome.Goal()
-            result = send_goal(self.node, self._reset_arm_client, goal_msg)
-            # Home
             if result == True:
                 yasmin.YASMIN_LOG_INFO("Goal succeeded")
-                # blackboard["foo_str"] = "home"
-                # TODO add a flag that denotes that you have not successfully picked up an igredient and tag the sandiwch as a failure
-                return "next_ingredient"
+                blackboard['ingredient_thickness'] += 0.003
+                return "succeeded"
             else:
                 yasmin.YASMIN_LOG_INFO(f"Goal failed with status {True}")
                 return "failed"
-
-
-
-        if result == True:
-            yasmin.YASMIN_LOG_INFO("Goal succeeded")
-            blackboard['ingredient_thickness'] += 0.003
-            return "succeeded"
-        else:
-            yasmin.YASMIN_LOG_INFO(f"Goal failed with status {True}")
-            return "failed"
+                        
 
 class PrePlaceState(State):
     def __init__(self, node) -> None:
@@ -590,23 +608,23 @@ class PlaceState(State):
         self._check_sandwitch_client = self.node.create_client(CheckIngredientPlace, "/snaak_vision/check_ingredient")
 
 
+
     def execute(self, blackboard: Blackboard) -> str:
         yasmin.YASMIN_LOG_INFO("Executing state Place")
         goal_msg = Place.Goal()
 
         pre_weight = get_weight(self.node, self._get_weight_assembly)
         print(pre_weight)
-
         if blackboard['current_ingredient'] == "bread_bottom_slice":
             goal_msg.x = blackboard["tray_center_coordinate"]["x"] #- 0.06
-            goal_msg.y = blackboard["tray_center_coordinate"]["y"] - 0.07 #for 
+            goal_msg.y = blackboard["tray_center_coordinate"]["y"] #- 0.07 #for  TODO: commented these out
             goal_msg.z = blackboard["tray_center_coordinate"]["z"] #+ blackboard['ingredient_thickness']
             goal_msg.ingredient_type = 1
             # result = send_goal(self.node, self._place_action_client, goal_msg)
         
         elif blackboard['current_ingredient'] == "bread_top_slice":
             goal_msg.x = blackboard["tray_center_coordinate"]["x"] #+ 0.06
-            goal_msg.y = blackboard["tray_center_coordinate"]["y"] - 0.07
+            goal_msg.y = blackboard["tray_center_coordinate"]["y"] #- 0.07
             goal_msg.z = blackboard["tray_center_coordinate"]["z"] #+ blackboard['ingredient_thickness']
             goal_msg.ingredient_type = 1
 
@@ -632,7 +650,7 @@ class PlaceState(State):
             yasmin.YASMIN_LOG_INFO("Failed to place the ingredient, retrying...")
             
             # you can change this number to retry more times
-            if blackboard['retry_place'] == 2:
+            if blackboard['retry_place'] == 3:
                 if blackboard["current_ingredient"] == "bread_bottom_slice":
                     yasmin.YASMIN_LOG_INFO("Aborting task: Failed to place bread bottom slice")
                     return "failed"
@@ -645,23 +663,39 @@ class PlaceState(State):
             else:
                 blackboard[blackboard["current_ingredient"]] += 1
 
-            get_weight
         else:
+            blackboard['retry_place'] = 0  
 
-            # if blackboard["current_ingredient"] == 'bread_top_slice'  or blackboard["current_ingredient"] == 'bread_bottom_slice':
-            #     ingredient_name = "bread"
-            #     sandwich_check_response = True
-            # else:
-            #     ingredient_name = blackboard["current_ingredient"]
-            #     sandwich_check_response = get_sandwich_check(self.node, self._check_sandwitch_client, ingredient_name)
+        
+        ### Sandwich Check
+            
+        if blackboard["current_ingredient"] == 'bread_top_slice'  or blackboard["current_ingredient"] == 'bread_bottom_slice':
+            ingredient_name = "bread"
+            sandwich_check_response = get_sandwich_check(self.node, self._check_sandwitch_client, ingredient_name)
+            if sandwich_check_response == True:
+                yasmin.YASMIN_LOG_INFO(f"bread placed correctly")
+            else:
+                yasmin.YASMIN_LOG_INFO(f"bread not placed correctly")
+
+            # sandwich_check_response = True
+        else:
+            ingredient_name = blackboard["current_ingredient"]
+            sandwich_check_response = get_sandwich_check(self.node, self._check_sandwitch_client, ingredient_name)
+            ing = blackboard["current_ingredient"]
+
+            if sandwich_check_response == True:
+                yasmin.YASMIN_LOG_INFO(f"{ing} placed correctly")
+            else:
+                yasmin.YASMIN_LOG_INFO(f"{ing} not placed correctly")
+
 
             # if sandwich_check_response == True:
             #     yasmin.YASMIN_LOG_INFO("Ingredient placed correctly")
             # else: 
             #     # TODO add a flag that denotes that you the ingredient is not placed correctly
-            #     yasmin.YASMIN_LOG_INFO("Ingredient not placed correctly, retrying...")
+            #     yasmin.YASMIN_LOG_INFO(f"{blackboard["current_ingredient"]} not placed correctly")
             
-            blackboard['retry_place'] = 0  
+            
 
 
 
@@ -728,7 +762,7 @@ def main():
 
     sm.add_state(
         "Recipe",
-        ReadRecipe(),
+        ReadRecipe(node),
         transitions={
             "loop": "Recipe",
             "start_recipe": "PreGrasp", 
