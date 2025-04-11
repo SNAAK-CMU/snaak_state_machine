@@ -186,10 +186,10 @@ class ReadStock(State):
                                 "weight_per_slice"
                             ]
 
-                            # Check if any ingredient has zero slices
-                            if data["slices"] == 0:
+                            # Check if any ingredient slice is equal or bigger than 0
+                            if data["slices"] < 0:
                                 yasmin.YASMIN_LOG_INFO(
-                                    f"Ingredient {ingredient} has 0 slices, proceeding to re-stock."
+                                    f"Ingredient {ingredient} has a negtive number, proceeding to re-stock."
                                 )
                                 return "restock"
 
@@ -246,8 +246,11 @@ class Restock(State):
             while not isinstance(slices, int):
                 try:
                     slices = int(input(f"Please input number of slices of {i}: "))
-                    if slices > 100 or slices < 1:
-                        print("Please enter a number between 1 and 100")
+                    print(slices)
+                    if  slices >= 0  and slices < 100:
+                        print("{i} slices recorded!")
+                    else:
+                        print("Please enter a number between 0 and 100")
                         slices = None
                 except:
                     continue
@@ -257,10 +260,13 @@ class Restock(State):
             curr_weight = get_weight(self.node, self._get_weight_bins)
             yasmin.YASMIN_LOG_INFO(f"weight after slices {curr_weight}")
             blackboard[f"{i}_weight"] = curr_weight - pre_weight
-            blackboard[f"{i}_weight_per_slice"] = (
-                blackboard[f"{i}_weight"] / blackboard[f"{i}_slices"]
-            )
-
+            try:
+                blackboard[f"{i}_weight_per_slice"] = (
+                    blackboard[f"{i}_weight"] / blackboard[f"{i}_slices"]
+                )
+            except:
+                blackboard[f"{i}_weight_per_slice"] = 0.0
+                
             recipe_data[i] = {
                 "slices": blackboard[f"{i}_slices"],
                 "weight": blackboard[f"{i}_weight"],
@@ -298,9 +304,19 @@ class ReadRecipe(State):
         time.sleep(1)
 
         file_path = "/home/snaak/Documents/recipe/recipe.yaml"
-        user_input = input("Enter S to start recipe or R to restock:")
 
-        user_input = user_input.lower()
+        user_input = None
+        while user_input == None:
+            try:
+                user_input = input("Enter S to start recipe or R to restock:")
+                user_input = user_input.lower()
+                if user_input not in ["s", "r"]:
+                    print("Invalid Input")
+                    user_input = None
+            except:
+                continue
+
+        
         if user_input == "s":
             yasmin.YASMIN_LOG_INFO("Starting Recipe")
 
@@ -330,6 +346,30 @@ class ReadRecipe(State):
                 yasmin.YASMIN_LOG_INFO("YAML file found")
                 reset_sandwich_checker(self.node, self.reset_sandwich_checker_client)
                 yasmin.YASMIN_LOG_INFO("Resetting sandwich checker")
+
+
+                # Check the recipe against the stock
+                ingredients_to_restock = []
+
+                # Bread needs 2 slices (top + bottom)
+                if blackboard["bread_slices"]  < 2:
+                    ingredients_to_restock.append("bread")
+
+                # Check cheese
+                if blackboard["cheese_slices"] < blackboard["cheese"]:
+                    ingredients_to_restock.append("cheese")
+
+                # Check ham
+                if blackboard["ham_slices"] < blackboard["ham"]:
+                    ingredients_to_restock.append("ham")
+
+                if ingredients_to_restock:
+                    yasmin.YASMIN_LOG_INFO(
+                        f"Insufficient ingredients: {', '.join(ingredients_to_restock)}. Please restock."
+                    )
+                    return "restock"
+
+
                 return "start_recipe"
             else:
                 yasmin.YASMIN_LOG_INFO("YAML file not found")
@@ -416,6 +456,11 @@ class PreGraspState(State):
         goal_msg = ExecuteTrajectory.Goal()
 
         if blackboard["bread_bottom_slice"] == False:
+            # Check stock
+            if blackboard["bread_slices"] <= 0:
+                yasmin.YASMIN_LOG_INFO("Out of Bread Slices")
+                # TODO what to do in case we are out of bread?
+
             blackboard["bread_bottom_slice"] = True
             blackboard["current_ingredient"] = "bread_bottom_slice"
             goal_msg.desired_location = "bin3"
@@ -433,6 +478,12 @@ class PreGraspState(State):
             and blackboard["cheese"] <= 0
             and blackboard["ham"] <= 0
         ):
+            
+            # Check stock
+            if blackboard["bread_slices"] <= 0:
+                yasmin.YASMIN_LOG_INFO("Out of Bread Slices")
+                # TODO what to do in case we are out of bread?
+            
             blackboard["bread_top_slice"] = True
             blackboard["current_ingredient"] = "bread_top_slice"
             goal_msg.desired_location = "bin3"
@@ -446,13 +497,16 @@ class PreGraspState(State):
                 return "failed"
 
         if blackboard["cheese"] > 0:
+            # Check stock
+            if blackboard["cheese_slices"] <= 0:
+                yasmin.YASMIN_LOG_INFO("Out of Cheese Slices")
+                # TODO what to do in case we are out of cheese?
             blackboard["cheese"] -= 1
             blackboard["current_ingredient"] = "cheese"
             goal_msg.desired_location = "bin2"
             yasmin.YASMIN_LOG_INFO("cheese position")
             result = send_goal(self.node, self._traj_action_client, goal_msg)
             if result == True:
-
                 yasmin.YASMIN_LOG_INFO("Goal succeeded")
                 return "succeeded"
             else:
@@ -460,6 +514,10 @@ class PreGraspState(State):
                 return "failed"
 
         if blackboard["ham"] > 0:
+            # Check stock
+            if blackboard["ham_slices"] <= 0:
+                yasmin.YASMIN_LOG_INFO("Out of Ham Slices")
+                # TODO what to do in case we are out of Ham?
             blackboard["ham"] -= 1
             blackboard["current_ingredient"] = "ham"
             goal_msg.desired_location = "bin1"
@@ -500,7 +558,7 @@ class PickupState(State):
     def execute(self, blackboard: Blackboard) -> str:
         yasmin.YASMIN_LOG_INFO("Executing state PickUp")
         goal_msg = Pickup.Goal()
-        retry_pickup = 1
+        retry_pickup = 0
         time.sleep(2)  # Time delay due to transformation issues
         pickup_tries = 3
 
