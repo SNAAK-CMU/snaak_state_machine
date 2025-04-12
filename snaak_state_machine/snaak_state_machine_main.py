@@ -15,7 +15,7 @@ from snaak_manipulation.action import ReturnHome, ExecuteTrajectory, Pickup, Pla
 from snaak_weight_read.srv import ReadWeight
 from std_srvs.srv import Trigger
 from snaak_vision.srv import GetXYZFromImage, CheckIngredientPlace
-from snaak_state_machine_utils import SandwichLogger
+from snaak_state_machine.snaak_state_machine_utils import SandwichLogger
 
 def send_goal(node, action_client: ActionClient, action_goal):
     """
@@ -370,7 +370,7 @@ class ReadRecipe(State):
                     )
                     return "restock"
                 ingred_dict = {"cheese" : blackboard["cheese"], "ham" : blackboard["ham"]}
-                blackboard["logger"] = SandwichLogger()
+                blackboard["logger"] = SandwichLogger(ingred_dict)
                 return "start_recipe"
             else:
                 yasmin.YASMIN_LOG_INFO("YAML file not found")

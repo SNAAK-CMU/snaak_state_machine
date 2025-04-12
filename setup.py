@@ -12,6 +12,7 @@ setup(
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/launch', ['launch/snaak_state_machine_launch.py']),
         ('share/' + package_name + '/launch', ['launch/snaak_state_machine_dependencies_launch.py']),
+        ('share/' + package_name + '/snaak_state_machine', ['snaak_state_machine/snaak_state_machine_utils.py']),
 
     ],
     install_requires=['setuptools'],
