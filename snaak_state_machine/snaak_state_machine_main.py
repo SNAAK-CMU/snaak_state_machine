@@ -416,10 +416,10 @@ class BreadLocalizationState(State):
     def execute(self, blackboard: Blackboard) -> str:
         yasmin.YASMIN_LOG_INFO("Executing state PreGrasp")
 
-        goal_msg = ExecuteTrajectory.Goal()
+        #goal_msg = ExecuteTrajectory.Goal()
 
-        goal_msg.desired_location = "assembly"
-        result = send_goal(self.node, self._traj_action_client, goal_msg)
+        #goal_msg.desired_location = "assembly"
+        #result = send_goal(self.node, self._traj_action_client, goal_msg)
 
         time.sleep(2)  # Time delay due to transformation issues
 
@@ -435,7 +435,8 @@ class BreadLocalizationState(State):
 
             blackboard["bread_center_coordinate"] = pickup_point
 
-            if result == True and pickup_point != None:
+            if pickup_point != None: # if result == True and pickup_point != None:
+
                 yasmin.YASMIN_LOG_INFO("Goal succeeded")
                 return "succeeded"
 
