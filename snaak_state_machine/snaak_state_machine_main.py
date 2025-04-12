@@ -15,7 +15,7 @@ from snaak_manipulation.action import ReturnHome, ExecuteTrajectory, Pickup, Pla
 from snaak_weight_read.srv import ReadWeight
 from std_srvs.srv import Trigger
 from snaak_vision.srv import GetXYZFromImage, CheckIngredientPlace
-
+from snaak_state_machine.snaak_state_machine_utils import SandwichLogger
 
 def send_goal(node, action_client: ActionClient, action_goal):
     """
@@ -369,8 +369,8 @@ class ReadRecipe(State):
                         f"Insufficient ingredients: {', '.join(ingredients_to_restock)}. Please restock."
                     )
                     return "restock"
-
-
+                ingred_dict = {"cheese" : blackboard["cheese"], "ham" : blackboard["ham"]}
+                blackboard["logger"] = SandwichLogger(ingred_dict)
                 return "start_recipe"
             else:
                 yasmin.YASMIN_LOG_INFO("YAML file not found")
@@ -416,10 +416,10 @@ class BreadLocalizationState(State):
     def execute(self, blackboard: Blackboard) -> str:
         yasmin.YASMIN_LOG_INFO("Executing state PreGrasp")
 
-        goal_msg = ExecuteTrajectory.Goal()
+        #goal_msg = ExecuteTrajectory.Goal()
 
-        goal_msg.desired_location = "assembly"
-        result = send_goal(self.node, self._traj_action_client, goal_msg)
+        #goal_msg.desired_location = "assembly"
+        #result = send_goal(self.node, self._traj_action_client, goal_msg)
 
         time.sleep(2)  # Time delay due to transformation issues
 
@@ -435,7 +435,8 @@ class BreadLocalizationState(State):
 
             blackboard["bread_center_coordinate"] = pickup_point
 
-            if result == True and pickup_point != None:
+            if pickup_point != None: # if result == True and pickup_point != None:
+
                 yasmin.YASMIN_LOG_INFO("Goal succeeded")
                 return "succeeded"
 
@@ -607,6 +608,7 @@ class PickupState(State):
                 if result == True:
                     yasmin.YASMIN_LOG_INFO("Goal succeeded")
                     # TODO add a flag that denotes that you have not successfully picked up an igredient and tag the sandiwch as a failure
+                    blackboard["logger"].update(blackboard["current_ingredient"], 0)
                     return "next_ingredient"
                 else:
                     yasmin.YASMIN_LOG_INFO(f"Goal failed with status {True}")
@@ -758,6 +760,7 @@ class PlaceState(State):
                     )
                     return "failed"
                 else:
+                    blackboard["logger"].update(blackboard["current_ingredient"], 0)
                     return "next_ingredient"
 
             if (
@@ -780,7 +783,6 @@ class PlaceState(State):
                 placed_slices = 1
 
             yasmin.YASMIN_LOG_INFO(f"Placed {placed_slices} slices of {blackboard['current_ingredient']}")
-
             if "bread" in blackboard["current_ingredient"]:
                 # blackboard["bread"] -= placed_slices #Updates the recipe
                 pass
@@ -798,8 +800,10 @@ class PlaceState(State):
                 self.node, self._check_sandwitch_client, ingredient_name
             )
             if sandwich_check_response == True:
+                blackboard["logger"].update(blackboard["current_ingredient"], placed_slices)
                 yasmin.YASMIN_LOG_INFO(f"bread placed correctly")
             else:
+                blackboard["logger"].update(blackboard["current_ingredient"], 0)
                 yasmin.YASMIN_LOG_INFO(f"bread not placed correctly")
 
         else:
@@ -810,8 +814,10 @@ class PlaceState(State):
             ing = blackboard["current_ingredient"]
 
             if sandwich_check_response == True:
+                blackboard["logger"].update(blackboard["current_ingredient"], placed_slices)
                 yasmin.YASMIN_LOG_INFO(f"{ing} placed correctly")
             else:
+                blackboard["logger"].update(blackboard["current_ingredient"], 0)
                 yasmin.YASMIN_LOG_INFO(f"{ing} not placed correctly")
 
         if result == True:
@@ -820,6 +826,7 @@ class PlaceState(State):
             if blackboard["current_ingredient"] == "bread_bottom_slice":
                 return "bread_localize"
             else:
+                blackboard["logger"].end()
                 return "succeeded"
 
         else:
@@ -834,7 +841,7 @@ class FailState(State):
 
     def execute(self, blackboard: Blackboard) -> str:
         yasmin.YASMIN_LOG_INFO("Fail State")
-
+        blackboard["logger"].fail()
         # Simulate operator input for testing purposes
         input = "ok"  # Replace this with actual input handling logic if needed
         time.sleep(1)
