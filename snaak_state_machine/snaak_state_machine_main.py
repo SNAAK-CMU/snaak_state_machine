@@ -502,7 +502,7 @@ class PreGraspState(State):
             # if blackboard["cheese_slices"] <= 0:
             #     yasmin.YASMIN_LOG_INFO("Out of Cheese Slices")
             #     # TODO what to do in case we are out of cheese?
-            blackboard["cheese"] -= 1
+            # blackboard["cheese"] -= 1
             blackboard["current_ingredient"] = "cheese"
             goal_msg.desired_location = "bin2"
             yasmin.YASMIN_LOG_INFO("cheese position")
@@ -519,7 +519,7 @@ class PreGraspState(State):
             # if blackboard["ham_slices"] <= 0:
             #     yasmin.YASMIN_LOG_INFO("Out of Ham Slices")
             #     # TODO what to do in case we are out of Ham?
-            blackboard["ham"] -= 1
+            # blackboard["ham"] -= 1
             blackboard["current_ingredient"] = "ham"
             goal_msg.desired_location = "bin1"
             yasmin.YASMIN_LOG_INFO("ham position")
