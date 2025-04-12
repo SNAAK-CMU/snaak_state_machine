@@ -14,14 +14,18 @@ class SandwichLogger():
             "cheese_desired", "cheese_actual",
             "ham_desired", "ham_actual"
         ]
-        directory = "/home/oberton/snaak_ws/src/snaak_state_machine/log"
+        directory = "/home/snaak/Documents/manipulation_ws/src/snaak_state_machine/log"
+
         if not os.path.exists(directory):
             os.makedirs(directory)
         self.filepath = os.path.join(directory, "result.csv")
         self.num_placements_attempted = 0
         self.num_placements_succeeded = 0
+        self.terminated = False
 
     def update(self, ingredient_id, num_placed):
+        if ingredient_id == "bread_top_slice" or ingredient_id == "bread_bottom_slice":
+            ingredient_id = "bread"
         if ingredient_id not in self.desired_dict:
             raise Exception("Invalid Ingredient")
         if ingredient_id != "bread":
@@ -34,32 +38,36 @@ class SandwichLogger():
         self.end(fail=True)
         
     def end(self, fail=False):
-        if self.num_placements_attempted == 0 or self.num_placements_succeeded / self.num_placements_attempted < 0.8:
-            fail = True
+        if not self.terminated:
+            if self.num_placements_attempted == 0 or self.num_placements_succeeded / self.num_placements_attempted < 0.8:
+                fail = True
 
-        data = {col: 0 for col in self.COLUMNS}
-        data.update({
-            "timestamp": self.timestamp,
-            "success": "Yes" if not fail else "No"
-        })
-        
-        for ingred in self.desired_dict:
-            data[f"{ingred}_desired"] = self.desired_dict[ingred]
-            data[f"{ingred}_actual"] = self.actual_dict.get(ingred, 0)
+            data = {col: 0 for col in self.COLUMNS}
+            data.update({
+                "timestamp": self.timestamp,
+                "success": "Yes" if not fail else "No"
+            })
+            
+            for ingred in self.desired_dict:
+                data[f"{ingred}_desired"] = self.desired_dict[ingred]
+                data[f"{ingred}_actual"] = self.actual_dict.get(ingred, 0)
 
-        with open(self.filepath, "a", newline="", encoding="utf8") as f:
-            writer = csv.DictWriter(f, fieldnames=self.COLUMNS)
-            if f.tell() == 0: # if empty, create header
-                writer.writeheader()
-            writer.writerow(data)
+            with open(self.filepath, "a", newline="", encoding="utf8") as f:
+                writer = csv.DictWriter(f, fieldnames=self.COLUMNS)
+                if f.tell() == 0: # if empty, create header
+                    writer.writeheader()
+                writer.writerow(data)
+            self.terminated = True
 
 if __name__ == "__main__":
-    ingred= {"cheese" : 2, "bologna": 2}
-    log = SandwichLogging(ingred)
+    ingred= {"cheese" : 2, "ham": 2}
+    log = SandwichLogger(ingred)
     log.update("cheese", 2)
-    log.update("bologna", 1)
-    log.update("bread", 2)
+    log.update("ham", 1)
+    log.update("bread_top_slice", 1)
+    log.update("bread_bottom_slice", 1)
+
     log.end()
     input()
-    log = SandwichLogging(ingred)
+    log = SandwichLogger(ingred)
     log.fail()
