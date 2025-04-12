@@ -3,6 +3,7 @@ import rclpy
 import yaml
 import yasmin
 import os
+import numpy as np
 from yasmin import State
 from yasmin import Blackboard
 from yasmin import StateMachine
@@ -459,7 +460,7 @@ class PreGraspState(State):
             # Check stock
             if blackboard["bread_slices"] <= 0:
                 yasmin.YASMIN_LOG_INFO("Out of Bread Slices")
-                # TODO what to do in case we are out of bread?
+                return "failed"
 
             blackboard["bread_bottom_slice"] = True
             blackboard["current_ingredient"] = "bread_bottom_slice"
@@ -480,10 +481,10 @@ class PreGraspState(State):
         ):
             
             # Check stock
-            if blackboard["bread_slices"] <= 0:
-                yasmin.YASMIN_LOG_INFO("Out of Bread Slices")
-                # TODO what to do in case we are out of bread?
-            
+            # if blackboard["bread_slices"] <= 0:
+            #     yasmin.YASMIN_LOG_INFO("Out of Bread Slices")
+            #     return "failed"
+
             blackboard["bread_top_slice"] = True
             blackboard["current_ingredient"] = "bread_top_slice"
             goal_msg.desired_location = "bin3"
@@ -498,9 +499,9 @@ class PreGraspState(State):
 
         if blackboard["cheese"] > 0:
             # Check stock
-            if blackboard["cheese_slices"] <= 0:
-                yasmin.YASMIN_LOG_INFO("Out of Cheese Slices")
-                # TODO what to do in case we are out of cheese?
+            # if blackboard["cheese_slices"] <= 0:
+            #     yasmin.YASMIN_LOG_INFO("Out of Cheese Slices")
+            #     # TODO what to do in case we are out of cheese?
             blackboard["cheese"] -= 1
             blackboard["current_ingredient"] = "cheese"
             goal_msg.desired_location = "bin2"
@@ -515,9 +516,9 @@ class PreGraspState(State):
 
         if blackboard["ham"] > 0:
             # Check stock
-            if blackboard["ham_slices"] <= 0:
-                yasmin.YASMIN_LOG_INFO("Out of Ham Slices")
-                # TODO what to do in case we are out of Ham?
+            # if blackboard["ham_slices"] <= 0:
+            #     yasmin.YASMIN_LOG_INFO("Out of Ham Slices")
+            #     # TODO what to do in case we are out of Ham?
             blackboard["ham"] -= 1
             blackboard["current_ingredient"] = "ham"
             goal_msg.desired_location = "bin1"
@@ -637,13 +638,22 @@ class PickupState(State):
 
                 retry_pickup += 1
                 continue
-
+     
             else:
                 retry_pickup = 0
+                weight_delta = pre_weight - curr_weight
+                try:
+                    picked_slices = int(np.round(weight_delta/blackboard[f"{blackboard['current_ingredient']}_weight_per_slice"]))
+                    picked_slices = max(picked_slices, 0) # Check for negative numbers
+                except:
+                    picked_slices = 1
+
+                yasmin.YASMIN_LOG_INFO(f"Picked {picked_slices} slices of {blackboard['current_ingredient']}")
+
                 if "bread" in blackboard["current_ingredient"]:
-                    blackboard["bread_slices"] -= 1
+                    blackboard["bread_slices"] -= picked_slices #Updates the stock
                 else:
-                    blackboard[f"{blackboard['current_ingredient']}_slices"] -= 1
+                    blackboard[f"{blackboard['current_ingredient']}_slices"] -= picked_slices #Updates the stock
                     # TODO we need to save the updated number of slices to the yaml file
 
             if result == True:
@@ -761,6 +771,21 @@ class PlaceState(State):
 
         else:
             blackboard["retry_place"] = 0
+
+            weight_delta = curr_weight - pre_weight
+            try:
+                placed_slices = int(np.round(weight_delta/blackboard[f"{blackboard['current_ingredient']}_weight_per_slice"]))
+                placed_slices = max(placed_slices, 0) # Check for negative numbers
+            except:
+                placed_slices = 1
+
+            yasmin.YASMIN_LOG_INFO(f"Placed {placed_slices} slices of {blackboard['current_ingredient']}")
+
+            if "bread" in blackboard["current_ingredient"]:
+                # blackboard["bread"] -= placed_slices #Updates the recipe
+                pass
+            else:
+                blackboard[f"{blackboard['current_ingredient']}"] -= placed_slices #Updates the recipe
 
         ### Sandwich Check
         # TODO: add flag that denotes if sandiwch is assembled correctly
