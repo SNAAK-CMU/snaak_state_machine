@@ -243,6 +243,7 @@ class Restock(State):
         remove_ingredient = input(
             "Please remove all ingredients from the bin and press enter to continue"
         )
+        time.sleep(1)
         yasmin.YASMIN_LOG_INFO("Removed all ingredients from the bin")
 
         for i in blackboard["ingredient_list"]:
@@ -257,15 +258,15 @@ class Restock(State):
                     slices = int(input(f"Please input number of slices of {i}: "))
                     print(slices)
                     if slices >= 0 and slices < 100:
-                        print("{i} slices recorded!")
+                        print(f"{i} slices recorded!")
                     else:
                         print("Please enter a number between 0 and 100")
                         slices = None
                 except:
                     continue
             slices = int(slices)
-
             blackboard[f"{i}_slices"] = int(slices)
+            time.sleep(1)
             curr_weight = get_weight(self.node, self._get_weight_bins)
             yasmin.YASMIN_LOG_INFO(f"weight after slices {curr_weight}")
             blackboard[f"{i}_weight"] = curr_weight - pre_weight
