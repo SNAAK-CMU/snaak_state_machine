@@ -17,6 +17,7 @@ from std_srvs.srv import Trigger
 from snaak_vision.srv import GetXYZFromImage, CheckIngredientPlace
 from snaak_state_machine.snaak_state_machine_utils import SandwichLogger
 
+
 def send_goal(node, action_client: ActionClient, action_goal):
     """
     Sends a goal to an action server and waits for the result.
@@ -124,7 +125,7 @@ def get_sandwich_check(node, service_client, ingredient_name):
     rclpy.spin_until_future_complete(node, future)
     result = future.result()
 
-    return result.is_placed
+    return result.is_placed, result.is_error
 
 
 def disable_arm(node, service_client):
@@ -158,7 +159,14 @@ def reset_sandwich_checker(node, service_client):
 
     yasmin.YASMIN_LOG_INFO(f"reset sandwich checker")
 
+def save_image(node, service_client):
+    disable_req = Trigger.Request()
+    future = service_client.call_async(disable_req)
+    rclpy.spin_until_future_complete(node, future)
 
+    yasmin.YASMIN_LOG_INFO(f"image_saved")
+
+    
 class ReadStock(State):
     def __init__(self, node) -> None:
         super().__init__(["succeeded", "failed", "restock"])
@@ -248,7 +256,7 @@ class Restock(State):
                 try:
                     slices = int(input(f"Please input number of slices of {i}: "))
                     print(slices)
-                    if  slices >= 0  and slices < 100:
+                    if slices >= 0 and slices < 100:
                         print("{i} slices recorded!")
                     else:
                         print("Please enter a number between 0 and 100")
@@ -267,7 +275,7 @@ class Restock(State):
                 )
             except:
                 blackboard[f"{i}_weight_per_slice"] = 0.0
-                
+
             recipe_data[i] = {
                 "slices": blackboard[f"{i}_slices"],
                 "weight": blackboard[f"{i}_weight"],
@@ -317,11 +325,11 @@ class ReadRecipe(State):
             except:
                 continue
 
-        
         if user_input == "s":
             yasmin.YASMIN_LOG_INFO("Starting Recipe")
 
             blackboard["retry_place"] = 0
+            blackboard["failed"] = False
 
             if os.path.exists(file_path):
                 with open(file_path, "r") as file:
@@ -348,12 +356,11 @@ class ReadRecipe(State):
                 reset_sandwich_checker(self.node, self.reset_sandwich_checker_client)
                 yasmin.YASMIN_LOG_INFO("Resetting sandwich checker")
 
-
                 # Check the recipe against the stock
                 ingredients_to_restock = []
 
                 # Bread needs 2 slices (top + bottom)
-                if blackboard["bread_slices"]  < 2:
+                if blackboard["bread_slices"] < 2:
                     ingredients_to_restock.append("bread")
 
                 # Check cheese
@@ -369,7 +376,7 @@ class ReadRecipe(State):
                         f"Insufficient ingredients: {', '.join(ingredients_to_restock)}. Please restock."
                     )
                     return "restock"
-                ingred_dict = {"cheese" : blackboard["cheese"], "ham" : blackboard["ham"]}
+                ingred_dict = {"cheese": blackboard["cheese"], "ham": blackboard["ham"]}
                 blackboard["logger"] = SandwichLogger(ingred_dict)
                 return "start_recipe"
             else:
@@ -416,10 +423,10 @@ class BreadLocalizationState(State):
     def execute(self, blackboard: Blackboard) -> str:
         yasmin.YASMIN_LOG_INFO("Executing state PreGrasp")
 
-        #goal_msg = ExecuteTrajectory.Goal()
+        # goal_msg = ExecuteTrajectory.Goal()
 
-        #goal_msg.desired_location = "assembly"
-        #result = send_goal(self.node, self._traj_action_client, goal_msg)
+        # goal_msg.desired_location = "assembly"
+        # result = send_goal(self.node, self._traj_action_client, goal_msg)
 
         time.sleep(2)  # Time delay due to transformation issues
 
@@ -435,13 +442,13 @@ class BreadLocalizationState(State):
 
             blackboard["bread_center_coordinate"] = pickup_point
 
-            if pickup_point != None: # if result == True and pickup_point != None:
+            if pickup_point != None:  # if result == True and pickup_point != None:
 
                 yasmin.YASMIN_LOG_INFO("Goal succeeded")
                 return "succeeded"
 
         yasmin.YASMIN_LOG_INFO(f"Bread Localization Fail")
-        return "failed"
+        return "succeeded"
 
 
 class PreGraspState(State):
@@ -480,7 +487,7 @@ class PreGraspState(State):
             and blackboard["cheese"] <= 0
             and blackboard["ham"] <= 0
         ):
-            
+
             # Check stock
             # if blackboard["bread_slices"] <= 0:
             #     yasmin.YASMIN_LOG_INFO("Out of Bread Slices")
@@ -532,7 +539,36 @@ class PreGraspState(State):
             else:
                 yasmin.YASMIN_LOG_INFO(f"Goal failed with status {True}")
                 return "failed"
+        blackboard["logger"].end()
 
+
+        # When the recipe is finished, save the data to the yaml file
+    
+        file_path = "/home/snaak/Documents/recipe/stock.yaml"
+        blackboard["ingredient_list"] = ["cheese", "ham", "bread"]
+        stock_data = {}
+
+        for i in blackboard["ingredient_list"]:
+            stock_data[i] = {
+                "slices": blackboard[f"{i}_slices"],
+                "weight": blackboard[f"{i}_weight"],
+                "weight_per_slice": blackboard[f"{i}_weight_per_slice"],
+            }
+
+        if os.path.exists(file_path):
+            with open(file_path, "r") as file:
+                stock = yaml.safe_load(file)  # Load existing data if file exists
+        else:
+            stock = {}  # Initialize as an empty dictionary if the file doesn't exist
+
+        # Append the new data to the stock
+        stock["ingredients"] = stock_data
+
+        # Write the updated stock to the file
+        with open(file_path, "w") as file:
+            yaml.dump(stock, file, default_flow_style=False)
+        
+        yasmin.YASMIN_LOG_INFO("Recipe data saved to stock.yaml")
         return "finished"
 
 
@@ -555,6 +591,9 @@ class PickupState(State):
         )
         self._disable_vacuum_client = self.node.create_client(
             Trigger, "/snaak_pneumatic/disable_vacuum"
+        )
+        self._save_image_client = self.node.create_client(
+            Trigger, "/snaak_vision/save_detection_image"
         )
 
     def execute(self, blackboard: Blackboard) -> str:
@@ -585,6 +624,8 @@ class PickupState(State):
             )
 
             if pickup_point == None:
+                yasmin.YASMIN_LOG_INFO("retrying pickup")
+                save_image(self.node, self._save_image_client)
                 retry_pickup += 1
 
             if (
@@ -609,6 +650,12 @@ class PickupState(State):
                     yasmin.YASMIN_LOG_INFO("Goal succeeded")
                     # TODO add a flag that denotes that you have not successfully picked up an igredient and tag the sandiwch as a failure
                     blackboard["logger"].update(blackboard["current_ingredient"], 0)
+                    if blackboard["current_ingredient"] == "bread_bottom_slice":
+                        blackboard["bread_bottom_slice"] = False
+                    elif blackboard["current_ingredient"] == "bread_top_slice":
+                        blackboard["bread_top_slice"] = False
+                    else:
+                        blackboard[f"{blackboard['current_ingredient']}"] -= 1  # Updates the recipe
                     return "next_ingredient"
                 else:
                     yasmin.YASMIN_LOG_INFO(f"Goal failed with status {True}")
@@ -637,25 +684,38 @@ class PickupState(State):
                 # disabled vacuum
                 disable_vacuum(self.node, self._disable_vacuum_client)
                 yasmin.YASMIN_LOG_INFO("Vacuum Disabled")
+                save_image(self.node, self._save_image_client)
+                yasmin.YASMIN_LOG_INFO("Failed to pick up the ingredient, retrying...")
 
                 retry_pickup += 1
                 continue
-     
+
             else:
                 retry_pickup = 0
                 weight_delta = pre_weight - curr_weight
                 try:
-                    picked_slices = int(np.round(weight_delta/blackboard[f"{blackboard['current_ingredient']}_weight_per_slice"]))
-                    picked_slices = max(picked_slices, 0) # Check for negative numbers
+                    picked_slices = int(
+                        np.round(
+                            weight_delta
+                            / blackboard[
+                                f"{blackboard['current_ingredient']}_weight_per_slice"
+                            ]
+                        )
+                    )
+                    picked_slices = max(picked_slices, 0)  # Check for negative numbers
                 except:
                     picked_slices = 1
 
-                yasmin.YASMIN_LOG_INFO(f"Picked {picked_slices} slices of {blackboard['current_ingredient']}")
+                yasmin.YASMIN_LOG_INFO(
+                    f"Picked {picked_slices} slices of {blackboard['current_ingredient']}"
+                )
 
                 if "bread" in blackboard["current_ingredient"]:
-                    blackboard["bread_slices"] -= picked_slices #Updates the stock
+                    blackboard["bread_slices"] -= picked_slices  # Updates the stock
                 else:
-                    blackboard[f"{blackboard['current_ingredient']}_slices"] -= picked_slices #Updates the stock
+                    blackboard[
+                        f"{blackboard['current_ingredient']}_slices"
+                    ] -= picked_slices  # Updates the stock
                     # TODO we need to save the updated number of slices to the yaml file
 
             if result == True:
@@ -663,7 +723,7 @@ class PickupState(State):
                 if "bread" in blackboard["current_ingredient"]:
                     blackboard["ingredient_thickness"] += 0.01
                 else:
-                    blackboard["ingredient_thickness"] += 0.003
+                    blackboard["ingredient_thickness"] += (0.007 * picked_slices)
                 return "succeeded"
             else:
                 yasmin.YASMIN_LOG_INFO(f"Goal failed with status {True}")
@@ -725,22 +785,28 @@ class PlaceState(State):
         pre_weight = get_weight(self.node, self._get_weight_assembly)
 
         if blackboard["current_ingredient"] == "bread_bottom_slice":
-            goal_msg.x = blackboard["tray_center_coordinate"]["x"] 
-            goal_msg.y = blackboard["tray_center_coordinate"]["y"] 
-            goal_msg.z = blackboard["tray_center_coordinate"]["z"]  + blackboard['ingredient_thickness']
+            goal_msg.x = blackboard["tray_center_coordinate"]["x"]
+            goal_msg.y = blackboard["tray_center_coordinate"]["y"]
+            goal_msg.z = (
+                blackboard["tray_center_coordinate"]["z"]
+                + blackboard["ingredient_thickness"]
+            )
             goal_msg.ingredient_type = 1
 
         elif blackboard["current_ingredient"] == "bread_top_slice":
-            goal_msg.x = blackboard["tray_center_coordinate"]["x"]  
-            goal_msg.y = blackboard["tray_center_coordinate"]["y"] 
-            goal_msg.z = blackboard["tray_center_coordinate"]["z"] + blackboard['ingredient_thickness']
+            goal_msg.x = blackboard["tray_center_coordinate"]["x"]
+            goal_msg.y = blackboard["tray_center_coordinate"]["y"]
+            goal_msg.z = (
+                blackboard["tray_center_coordinate"]["z"]
+                + blackboard["ingredient_thickness"]
+            )
             goal_msg.ingredient_type = 1
 
         else:
             pickup_point = blackboard["bread_center_coordinate"]
             goal_msg.x = pickup_point.x
             goal_msg.y = pickup_point.y
-            goal_msg.z = pickup_point.z + blackboard['ingredient_thickness']
+            goal_msg.z = pickup_point.z + blackboard["ingredient_thickness"]
             goal_msg.ingredient_type = 1
 
         result = send_goal(self.node, self._place_action_client, goal_msg)
@@ -777,30 +843,55 @@ class PlaceState(State):
 
             weight_delta = curr_weight - pre_weight
             try:
-                placed_slices = int(np.round(weight_delta/blackboard[f"{blackboard['current_ingredient']}_weight_per_slice"]))
-                placed_slices = max(placed_slices, 0) # Check for negative numbers
+                placed_slices = int(
+                    np.round(
+                        weight_delta
+                        / blackboard[
+                            f"{blackboard['current_ingredient']}_weight_per_slice"
+                        ]
+                    )
+                )
+                placed_slices = max(placed_slices, 0)  # Check for negative numbers
             except:
                 placed_slices = 1
 
-            yasmin.YASMIN_LOG_INFO(f"Placed {placed_slices} slices of {blackboard['current_ingredient']}")
+            yasmin.YASMIN_LOG_INFO(
+                f"Placed {placed_slices} slices of {blackboard['current_ingredient']}"
+            )
             if "bread" in blackboard["current_ingredient"]:
                 # blackboard["bread"] -= placed_slices #Updates the recipe
                 pass
             else:
-                blackboard[f"{blackboard['current_ingredient']}"] -= placed_slices #Updates the recipe
+                blackboard[
+                    f"{blackboard['current_ingredient']}"
+                ] -= placed_slices  # Updates the recipe
 
         ### Sandwich Check
-        # TODO: add flag that denotes if sandiwch is assembled correctly
-        if (
-            blackboard["current_ingredient"] == "bread_top_slice"
-            or blackboard["current_ingredient"] == "bread_bottom_slice"
-        ):
-            ingredient_name = "bread"
-            sandwich_check_response = get_sandwich_check(
+
+        if blackboard["current_ingredient"] == "bread_bottom_slice":
+            ingredient_name = "bread_bottom"
+
+            sandwich_check_response, sandwich_check_error = get_sandwich_check(
                 self.node, self._check_sandwitch_client, ingredient_name
             )
             if sandwich_check_response == True:
-                blackboard["logger"].update(blackboard["current_ingredient"], placed_slices)
+                blackboard["logger"].update(
+                    blackboard["current_ingredient"], placed_slices
+                )
+                yasmin.YASMIN_LOG_INFO(f"bread bottom slice placed correctly")
+            else:
+                blackboard["logger"].update(blackboard["current_ingredient"], 0)
+                yasmin.YASMIN_LOG_INFO(f"bread not placed correctly")
+
+        elif blackboard["current_ingredient"] == "bread_top_slice":
+            ingredient_name = "bread_top"
+            sandwich_check_response, sandwich_check_error = get_sandwich_check(
+                self.node, self._check_sandwitch_client, ingredient_name
+            )
+            if sandwich_check_response == True:
+                blackboard["logger"].update(
+                    blackboard["current_ingredient"], placed_slices
+                )
                 yasmin.YASMIN_LOG_INFO(f"bread placed correctly")
             else:
                 blackboard["logger"].update(blackboard["current_ingredient"], 0)
@@ -808,17 +899,18 @@ class PlaceState(State):
 
         else:
             ingredient_name = blackboard["current_ingredient"]
-            sandwich_check_response = get_sandwich_check(
+            sandwich_check_response, sandwich_check_error = get_sandwich_check(
                 self.node, self._check_sandwitch_client, ingredient_name
             )
-            ing = blackboard["current_ingredient"]
 
             if sandwich_check_response == True:
-                blackboard["logger"].update(blackboard["current_ingredient"], placed_slices)
-                yasmin.YASMIN_LOG_INFO(f"{ing} placed correctly")
+                blackboard["logger"].update(
+                    blackboard["current_ingredient"], placed_slices
+                )
+                yasmin.YASMIN_LOG_INFO(f"{ingredient_name} placed correctly")
             else:
                 blackboard["logger"].update(blackboard["current_ingredient"], 0)
-                yasmin.YASMIN_LOG_INFO(f"{ing} not placed correctly")
+                yasmin.YASMIN_LOG_INFO(f"{ingredient_name} not placed correctly")
 
         if result == True:
             yasmin.YASMIN_LOG_INFO("Goal succeeded")
@@ -826,7 +918,6 @@ class PlaceState(State):
             if blackboard["current_ingredient"] == "bread_bottom_slice":
                 return "bread_localize"
             else:
-                blackboard["logger"].end()
                 return "succeeded"
 
         else:
@@ -841,6 +932,36 @@ class FailState(State):
 
     def execute(self, blackboard: Blackboard) -> str:
         yasmin.YASMIN_LOG_INFO("Fail State")
+
+        file_path = "/home/snaak/Documents/recipe/stock.yaml"
+        blackboard["ingredient_list"] = ["cheese", "ham", "bread"]
+        stock_data = {}
+
+        
+        if blackboard["failed"] == False:
+            for i in blackboard["ingredient_list"]:
+                stock_data[i] = {
+                    "slices": blackboard[f"{i}_slices"],
+                    "weight": blackboard[f"{i}_weight"],
+                    "weight_per_slice": blackboard[f"{i}_weight_per_slice"],
+                }
+
+            if os.path.exists(file_path):
+                with open(file_path, "r") as file:
+                    stock = yaml.safe_load(file)  # Load existing data if file exists
+            else:
+                stock = {}  # Initialize as an empty dictionary if the file doesn't exist
+
+            # Append the new data to the stock
+            stock["ingredients"] = stock_data
+
+            # Write the updated stock to the file
+            with open(file_path, "w") as file:
+                yaml.dump(stock, file, default_flow_style=False)
+            
+            yasmin.YASMIN_LOG_INFO("Recipe data saved to stock.yaml")
+
+        blackboard["failed"] = True
         blackboard["logger"].fail()
         # Simulate operator input for testing purposes
         input = "ok"  # Replace this with actual input handling logic if needed

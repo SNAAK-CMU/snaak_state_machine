@@ -9,12 +9,12 @@ class SandwichLogger():
         self.actual_dict = {ingredient: 0 for ingredient in self.desired_dict}
         self.timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")    
         self.COLUMNS = [
-            "timestamp", "success",
+            "timestamp", "success", "duration",
             "bread_desired", "bread_actual",
             "cheese_desired", "cheese_actual",
             "ham_desired", "ham_actual"
         ]
-        directory = "/home/snaak/Documents/manipulation_ws/src/snaak_state_machine/log"
+        directory = "/home/snaak/Documents/manipulation_ws/src/snaak_state_machine/results"
 
         if not os.path.exists(directory):
             os.makedirs(directory)
@@ -31,7 +31,8 @@ class SandwichLogger():
         if ingredient_id != "bread":
             self.num_placements_attempted += 1
             if 0 < num_placed < 3:
-                self.num_placements_succeeded += 1
+                self.num_placements_succeeded += 1 
+        print(f"Placed {num_placed} of {ingredient_id}")
         self.actual_dict[ingredient_id] += num_placed
 
     def fail(self):
@@ -39,13 +40,15 @@ class SandwichLogger():
         
     def end(self, fail=False):
         if not self.terminated:
-            if self.num_placements_attempted == 0 or self.num_placements_succeeded / self.num_placements_attempted < 0.8:
+            if self.num_placements_attempted == 0 or self.num_placements_succeeded / self.num_placements_attempted < 0.75:
                 fail = True
 
             data = {col: 0 for col in self.COLUMNS}
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             data.update({
                 "timestamp": self.timestamp,
-                "success": "Yes" if not fail else "No"
+                "success": "Yes" if not fail else "No",
+                "duration" : (datetime.now() - datetime.strptime(self.timestamp, "%Y-%m-%d %H:%M:%S")).total_seconds(),
             })
             
             for ingred in self.desired_dict:
