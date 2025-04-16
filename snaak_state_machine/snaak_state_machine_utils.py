@@ -32,7 +32,7 @@ class SandwichLogger():
             self.num_placements_attempted += 1
             if 0 < num_placed < 3:
                 self.num_placements_succeeded += 1 
-        print(f"Placed {num_placed} of {ingredient_id}")
+        # print(f"Placed {num_placed} of {ingredient_id}")
         self.actual_dict[ingredient_id] += num_placed
 
     def fail(self):
