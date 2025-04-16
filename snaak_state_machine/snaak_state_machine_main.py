@@ -16,6 +16,7 @@ from snaak_weight_read.srv import ReadWeight
 from std_srvs.srv import Trigger
 from snaak_vision.srv import GetXYZFromImage, CheckIngredientPlace
 from snaak_state_machine.snaak_state_machine_utils import SandwichLogger
+import traceback
 
 
 def send_goal(node, action_client: ActionClient, action_goal):
@@ -279,11 +280,20 @@ class Restock(State):
             except:
                 blackboard[f"{i}_weight_per_slice"] = 0.0
 
+            # hardcode number of the wight per slice
+            if i == "cheese":
+                blackboard[f"{i}_weight_per_slice"] = 19.00
+            elif i == "ham":
+                blackboard[f"{i}_weight_per_slice"] =17.00
+            elif i == "bread":
+                blackboard[f"{i}_weight_per_slice"] = 32.00
+
             recipe_data[i] = {
                 "slices": blackboard[f"{i}_slices"],
                 "weight": blackboard[f"{i}_weight"],
                 "weight_per_slice": blackboard[f"{i}_weight_per_slice"],
             }
+
             time.sleep(1)
 
         if os.path.exists(file_path):
@@ -294,6 +304,7 @@ class Restock(State):
 
         # Append the new data to the recipe
         recipe["ingredients"] = recipe_data
+
 
         # Write the updated recipe to the file
         with open(file_path, "w") as file:
@@ -679,7 +690,7 @@ class PickupState(State):
 
             result = send_goal(self.node, self._pickup_action_client, goal_msg)
 
-            # time.sleep(1) # Wait for weight scale
+            time.sleep(1) # Wait for weight scale
 
             curr_weight = get_weight(self.node, self._get_weight_bins)
             yasmin.YASMIN_LOG_INFO(
@@ -709,9 +720,13 @@ class PickupState(State):
                             ]
                         )
                     )
-                    picked_slices = max(picked_slices, 0)  # Check for negative numbers
+                    picked_slices = max(picked_slices, 0) # Check for negative numbers
+                    print('##################')  
+                    print(picked_slices)
+                    print('##################')
                 except:
                     picked_slices = 1
+                    traceback.print_exc()
                 blackboard["picked_slices"] = picked_slices
 
                 yasmin.YASMIN_LOG_INFO(
@@ -783,7 +798,6 @@ class PlaceState(State):
     def execute(self, blackboard: Blackboard) -> str:
         yasmin.YASMIN_LOG_INFO("Executing state Place")
         goal_msg = Place.Goal()
-
         pre_weight = get_weight(self.node, self._get_weight_assembly)
 
         if blackboard["current_ingredient"] == "bread_bottom_slice":
@@ -814,6 +828,9 @@ class PlaceState(State):
         # time.sleep(1) # Time delay for the weight scale
 
         curr_weight = get_weight(self.node, self._get_weight_assembly)
+        yasmin.YASMIN_LOG_INFO(f"weight after placing {curr_weight}")
+        placed_slices = 1
+        check_sandwich = False
 
         if curr_weight - pre_weight < 5:
             blackboard["retry_place"] += 1
@@ -835,26 +852,23 @@ class PlaceState(State):
             ):
                 blackboard[blackboard["current_ingredient"]] = False
 
-            else:
-                blackboard[blackboard["current_ingredient"]] += 1
+            # else:
+            #     blackboard[blackboard["current_ingredient"]] += 1
 
         else:
             blackboard["retry_place"] = 0
+            check_sandwich = True
 
             weight_delta = curr_weight - pre_weight
+            yasmin.YASMIN_LOG_INFO(f"Delta in placement weight {weight_delta}")
             try:
-                placed_slices = int(
-                    np.round(
-                        weight_delta
-                        / blackboard[
-                            f"{blackboard['current_ingredient']}_weight_per_slice"
-                        ]
-                    )
-                )
+                placed_slices = int(np.round(weight_delta/ blackboard[f"{blackboard['current_ingredient']}_weight_per_slice"]))
                 placed_slices = max(placed_slices, 0)  # Check for negative numbers
+
             except:
                 placed_slices = 1
-
+                traceback.print_exc()
+                
             yasmin.YASMIN_LOG_INFO(
                 f"Placed {placed_slices} slices of {blackboard['current_ingredient']}"
             )
@@ -862,31 +876,32 @@ class PlaceState(State):
                 # blackboard["bread"] -= placed_slices #Updates the recipe
                 pass
             else:
-                blackboard[
-                    f"{blackboard['current_ingredient']}"
-                ] -= placed_slices  # Updates the recipe
+                blackboard[blackboard['current_ingredient']] -= placed_slices  # Updates the recipe
+                print(
+                    f"Remaining {blackboard['current_ingredient']} slices: {blackboard[blackboard['current_ingredient']]}"
+                )
+    
 
         ### Sandwich Check
-
-        if blackboard["current_ingredient"] == "bread_bottom_slice":
+        
+        if blackboard["current_ingredient"] == "bread_bottom_slice" and check_sandwich:
             ingredient_name = "bread_bottom"
 
             sandwich_check_response, sandwich_check_error = get_sandwich_check(
-                self.node, self._check_sandwitch_client, ingredient_name, blackboard["picked_slices"]
+                self.node, self._check_sandwitch_client, ingredient_name, placed_slices
             )
             if sandwich_check_response == True:
                 blackboard["logger"].update(
-                    blackboard["current_ingredient"], placed_slices
-                )
+                    blackboard["current_ingredient"], placed_slices)
                 yasmin.YASMIN_LOG_INFO(f"bread bottom slice placed correctly")
             else:
                 blackboard["logger"].update(blackboard["current_ingredient"], 0)
                 yasmin.YASMIN_LOG_INFO(f"bread not placed correctly")
 
-        elif blackboard["current_ingredient"] == "bread_top_slice":
+        elif blackboard["current_ingredient"] == "bread_top_slice" and check_sandwich:
             ingredient_name = "bread_top"
             sandwich_check_response, sandwich_check_error = get_sandwich_check(
-                self.node, self._check_sandwitch_client, ingredient_name, blackboard["picked_slices"]
+                self.node, self._check_sandwitch_client, ingredient_name, placed_slices
             )
             if sandwich_check_response == True:
                 blackboard["logger"].update(
@@ -897,10 +912,10 @@ class PlaceState(State):
                 blackboard["logger"].update(blackboard["current_ingredient"], 0)
                 yasmin.YASMIN_LOG_INFO(f"bread not placed correctly")
 
-        else:
+        elif check_sandwich:
             ingredient_name = blackboard["current_ingredient"]
             sandwich_check_response, sandwich_check_error = get_sandwich_check(
-                self.node, self._check_sandwitch_client, ingredient_name, blackboard["picked_slices"]
+                self.node, self._check_sandwitch_client, ingredient_name, placed_slices
             )
 
             if sandwich_check_response == True:
@@ -911,6 +926,10 @@ class PlaceState(State):
             else:
                 blackboard["logger"].update(blackboard["current_ingredient"], 0)
                 yasmin.YASMIN_LOG_INFO(f"{ingredient_name} not placed correctly")
+
+        else:
+            yasmin.YASMIN_LOG_INFO("No sandwich check needed")
+
 
         if result == True:
             yasmin.YASMIN_LOG_INFO("Goal succeeded")
