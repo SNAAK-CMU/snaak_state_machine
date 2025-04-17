@@ -282,9 +282,9 @@ class Restock(State):
 
             # hardcode number of the wight per slice
             if i == "cheese":
-                blackboard[f"{i}_weight_per_slice"] = 19.00
+                blackboard[f"{i}_weight_per_slice"] = 20.00  #19.00
             elif i == "ham":
-                blackboard[f"{i}_weight_per_slice"] =17.00
+                blackboard[f"{i}_weight_per_slice"] = 17     #17.00
             elif i == "bread":
                 blackboard[f"{i}_weight_per_slice"] = 32.00
 
@@ -455,16 +455,18 @@ class BreadLocalizationState(State):
             if pickup_point == None:
                 time.sleep(0.5)
                 yasmin.YASMIN_LOG_INFO("retrying bread localization")
+                blackboard["bread_center_coordinate"] = None
 
-            blackboard["bread_center_coordinate"] = pickup_point
 
             if pickup_point != None:  # if result == True and pickup_point != None:
-
+                blackboard["bread_center_coordinate"] = pickup_point
+                
                 yasmin.YASMIN_LOG_INFO("Goal succeeded")
                 return "succeeded"
 
         yasmin.YASMIN_LOG_INFO(f"Bread Localization Fail")
-        return "succeeded"
+
+        return "failed"
 
 
 class PreGraspState(State):
