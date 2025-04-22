@@ -641,22 +641,21 @@ class PickupState(State):
         retry_pickup = 0
         time.sleep(2)  # Time delay due to transformation issues
         pickup_tries = 3
+        if blackboard["current_ingredient"] == "bread_bottom_slice":
+            ingredient_number = 3
+
+        if blackboard["current_ingredient"] == "cheese":
+            ingredient_number = 2
+
+        if blackboard["current_ingredient"] == "ham":
+            ingredient_number = 1
+
+        if blackboard["current_ingredient"] == "bread_top_slice":
+            ingredient_number = 3
 
         while retry_pickup <= pickup_tries:  # change this to try more pick ups
 
             pre_weight = get_weight(self.node, self._get_weight_bins)
-
-            if blackboard["current_ingredient"] == "bread_bottom_slice":
-                ingredient_number = 3
-
-            if blackboard["current_ingredient"] == "cheese":
-                ingredient_number = 2
-
-            if blackboard["current_ingredient"] == "ham":
-                ingredient_number = 1
-
-            if blackboard["current_ingredient"] == "bread_top_slice":
-                ingredient_number = 3
 
             pickup_point = get_point_XYZ(
                 self.node, self._get_pickup_xyz_client, ingredient_number, pickup=True
@@ -710,6 +709,7 @@ class PickupState(State):
             goal_msg.z = pickup_point.z
             # for pickup of sliced ingredients
             goal_msg.ingredient_type = 1
+            goal_msg.bin_id = ingredient_number
 
             result = send_goal(self.node, self._pickup_action_client, goal_msg)
 
