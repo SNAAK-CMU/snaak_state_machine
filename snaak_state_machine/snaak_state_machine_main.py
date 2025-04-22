@@ -199,11 +199,11 @@ class ReadStock(State):
                             ]
 
                             # Check if any ingredient slice is equal or bigger than 0
-                            if data["slices"] < 0:
-                                yasmin.YASMIN_LOG_INFO(
-                                    f"Ingredient {ingredient} has a negtive number, proceeding to re-stock."
-                                )
-                                return "restock"
+                            # if data["slices"] < 0:
+                            #     yasmin.YASMIN_LOG_INFO(
+                            #         f"Ingredient {ingredient} has a negtive number, proceeding to re-stock."
+                            #     )
+                            #     return "restock"
 
                         return "succeeded"
                     else:
@@ -238,11 +238,27 @@ class Restock(State):
 
     def execute(self, blackboard):
         yasmin.YASMIN_LOG_INFO("Restocking Mode")
+
+        ingredient_info_file_path = "/home/snaak/Documents/recipe/ingredients_info.yaml"
+        if os.path.exists(ingredient_info_file_path):
+            ingredient_info = {}
+            with open(ingredient_info_file_path, "r") as file:
+                ingredient_info = yaml.safe_load(file)
+                print(ingredient_info["ingredients"].items())
+            
+                for ingredient, data in ingredient_info["ingredients"].items():
+                    print(ingredient)
+                    ingredient_info[ingredient] = [data["brand"], data["type"],  data["weight_per_slice"]]
+                    yasmin.YASMIN_LOG_INFO(f"Ingredient {ingredient} loaded from file")
+
+        print(ingredient_info)
+
         file_path = "/home/snaak/Documents/recipe/stock.yaml"
         blackboard["ingredient_list"] = ["cheese", "ham", "bread"]
         recipe_data = {}
+        print('test')
         disable_arm(self.node, self._disable_arm)
-
+        print('test_1')
         remove_ingredient = input(
             "Please remove all ingredients from the bin and press enter to continue"
         )
@@ -255,38 +271,44 @@ class Restock(State):
             pre_weight = get_weight(self.node, self._get_weight_bins)
             yasmin.YASMIN_LOG_INFO(f"weight before slices {pre_weight}")
             print(f"start placing slices of {i}")
-            slices = None
-            while not isinstance(slices, int):
+            
+            # convert the ingredient info dictionary to a list and print it with a ordered number
+            print("Available ingredients:")
+            for index, (key, value) in enumerate(ingredient_info.items(), start=0):
+                if index == 0:
+                    continue
+                print(f"{index}. {key}") 
+
+            ingredient_index = None
+            while not isinstance(ingredient_index, int):
                 try:
-                    slices = int(input(f"Please input number of slices of {i}: "))
-                    print(slices)
-                    if slices >= 0 and slices < 100:
-                        print(f"{i} slices recorded!")
+                    ingredient_index = int(input(f"Place the ingredient at the {i} bin and select the ingredient type you want to use for :")) 
+                    if ingredient_index >= 0 and ingredient_index < 100:
+                        ingredient_name = list(ingredient_info.keys())[ingredient_index]
+                        print(f"You selected {ingredient_name}")
                     else:
                         print("Please enter a number between 0 and 100")
-                        slices = None
+                        ingredient_index = None
                 except:
                     continue
-            slices = int(slices)
-            blackboard[f"{i}_slices"] = int(slices)
+
             time.sleep(1)
             curr_weight = get_weight(self.node, self._get_weight_bins)
             yasmin.YASMIN_LOG_INFO(f"weight after slices {curr_weight}")
             blackboard[f"{i}_weight"] = curr_weight - pre_weight
-            try:
-                blackboard[f"{i}_weight_per_slice"] = (
-                    blackboard[f"{i}_weight"] / blackboard[f"{i}_slices"]
-                )
-            except:
-                blackboard[f"{i}_weight_per_slice"] = 0.0
+            blackboard[f"{i}_weight_per_slice"] = ingredient_info[ingredient_name][2]
+            print(blackboard[f"{i}_weight"] / blackboard[f"{i}_weight_per_slice"])
 
-            # hardcode number of the wight per slice
-            if i == "cheese":
-                blackboard[f"{i}_weight_per_slice"] = 20.00  #19.00
-            elif i == "ham":
-                blackboard[f"{i}_weight_per_slice"] = 17     #17.00
-            elif i == "bread":
-                blackboard[f"{i}_weight_per_slice"] = 32.00
+            try:
+                blackboard[f"{i}_slices"] = int(
+                    blackboard[f"{i}_weight"] // blackboard[f"{i}_weight_per_slice"]
+                )
+                yasmin.YASMIN_LOG_INFO("Number of slices calculated is " + str(blackboard[f"{i}_slices"]))
+            except:
+                yasmin.YASMIN_LOG_INFO(
+                    f"Error calculating slices for {i}. Setting number of slices to 0"
+                )
+                blackboard[f"{i}_slices"]  = 0
 
             recipe_data[i] = {
                 "slices": blackboard[f"{i}_slices"],
@@ -646,13 +668,12 @@ class PickupState(State):
                 save_image(self.node, self._save_image_client)
                 retry_pickup += 1
 
-            if (
-                retry_pickup == pickup_tries
-                and blackboard["current_ingredient"] == "bread_bottom_slice"
-            ):
-                yasmin.YASMIN_LOG_INFO(
-                    "Aborting task: Failed to identify bread botton slice"
-                )
+            if (retry_pickup == pickup_tries and blackboard["current_ingredient"] == "bread_bottom_slice"):
+                yasmin.YASMIN_LOG_INFO("Aborting task: Failed to identify bread botton slice")
+                return "failed"
+            
+            if (retry_pickup == pickup_tries and blackboard["current_ingredient"] == "bread_top_slice"):
+                yasmin.YASMIN_LOG_INFO("Aborting task: Failed to identify bread top slice")
                 return "failed"
 
             if retry_pickup == pickup_tries:
