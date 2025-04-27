@@ -244,21 +244,15 @@ class Restock(State):
             ingredient_info = {}
             with open(ingredient_info_file_path, "r") as file:
                 ingredient_info = yaml.safe_load(file)
-                print(ingredient_info["ingredients"].items())
             
                 for ingredient, data in ingredient_info["ingredients"].items():
-                    print(ingredient)
                     ingredient_info[ingredient] = [data["brand"], data["type"],  data["weight_per_slice"]]
                     yasmin.YASMIN_LOG_INFO(f"Ingredient {ingredient} loaded from file")
-
-        print(ingredient_info)
 
         file_path = "/home/snaak/Documents/recipe/stock.yaml"
         blackboard["ingredient_list"] = ["cheese", "ham", "bread"]
         recipe_data = {}
-        print('test')
         disable_arm(self.node, self._disable_arm)
-        print('test_1')
         remove_ingredient = input(
             "Please remove all ingredients from the bin and press enter to continue"
         )
@@ -273,14 +267,17 @@ class Restock(State):
             print(f"start placing slices of {i}")
             
             # convert the ingredient info dictionary to a list and print it with a ordered number
+            print('###############################')
             print("Available ingredients:")
             for index, (key, value) in enumerate(ingredient_info.items(), start=0):
                 if index == 0:
                     continue
-                print(f"{index}. {key}") 
+                if value[1] == i:
+                    print(f"{index}. {key}") 
 
             ingredient_index = None
             while not isinstance(ingredient_index, int):
+
                 try:
                     ingredient_index = int(input(f"Place the ingredient at the {i} bin and select the ingredient type you want to use for :")) 
                     if ingredient_index >= 0 and ingredient_index < 100:
@@ -465,10 +462,11 @@ class BreadLocalizationState(State):
         # goal_msg.desired_location = "assembly"
         # result = send_goal(self.node, self._traj_action_client, goal_msg)
 
-        time.sleep(2)  # Time delay due to transformation issues
 
         retries = 3
         for i in range(retries):
+            time.sleep(2)  # Time delay due to transformation issues
+
             retries -= 1
             pickup_point = get_point_XYZ(
                 self.node, self._get_place_xyz_client, 5, pickup=False
@@ -702,6 +700,7 @@ class PickupState(State):
                     return "failed"
 
             if pickup_point == None:
+                time.sleep(1.0) # Time sleep betweeen pickups
                 continue
 
             goal_msg.x = pickup_point.x
@@ -888,9 +887,16 @@ class PlaceState(State):
                 placed_slices = int(np.round(weight_delta/ blackboard[f"{blackboard['current_ingredient']}_weight_per_slice"]))
                 placed_slices = max(placed_slices, 0)  # Check for negative numbers
 
+                if placed_slices > blackboard["picked_slices"]:
+                    yasmin.YASMIN_LOG_INFO(f"Placed {placed_slices} slices of {blackboard['current_ingredient']}")
+                    yasmin.YASMIN_LOG_INFO(
+                        f"Strange behavior, placed more slices than picked up, going to fail state")
+                    return "failed"
             except:
                 placed_slices = 1
                 traceback.print_exc()
+
+            blackboard["placed_slices"] = placed_slices
                 
             yasmin.YASMIN_LOG_INFO(
                 f"Placed {placed_slices} slices of {blackboard['current_ingredient']}"
