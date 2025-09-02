@@ -76,18 +76,30 @@ class PlaceState(State):
         placed_slices = 1
         check_sandwich = False
 
-        if curr_weight - pre_weight < 5:
+        if "bread" in blackboard["current_ingredient"]:
+            curr_ingredient_weight_per_slice = blackboard["bread_weight_per_slice"]
+        else:
+            curr_ingredient_weight_per_slice = blackboard[f"{blackboard['current_ingredient']}_weight_per_slice"]
+
+        if curr_weight - pre_weight < curr_ingredient_weight_per_slice * 0.2:
             blackboard["retry_place"] += 1
             yasmin.YASMIN_LOG_INFO("Failed to place the ingredient, retrying...")
+            print(" ##############################################")
+            print(f"Retry attempt {blackboard['retry_place']}")
+            print(" ##############################################")
 
             if blackboard["retry_place"] == 3:
+                print(" ##############################################")
+                print("Max retry attempts reached, moving to next ingredient")
+                print(" ##############################################")
+
                 if blackboard["current_ingredient"] == "bread_bottom_slice":
                     yasmin.YASMIN_LOG_INFO(
                         "Aborting task: Failed to place bread bottom slice"
                     )
                     return "failed"
                 else:
-                    blackboard["logger"].update(blackboard["current_ingredient"], 0)
+                    blackboard[blackboard["current_ingredient"]] = 0
                     return "next_ingredient"
 
             if (

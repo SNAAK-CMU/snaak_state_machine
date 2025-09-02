@@ -1,4 +1,5 @@
 from setuptools import find_packages, setup
+from glob import glob
 
 package_name = 'snaak_state_machine'
 
@@ -12,7 +13,8 @@ setup(
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/launch', ['launch/snaak_state_machine_launch.py']),
         ('share/' + package_name + '/launch', ['launch/snaak_state_machine_dependencies_launch.py']),
-        ('share/' + package_name + '/snaak_state_machine', ['snaak_state_machine/snaak_state_machine_utils.py']),
+        ('share/' + package_name + '/snaak_state_machine', ['snaak_state_machine/utils/snaak_state_machine_utils.py']),
+        ('share/' + package_name + '/snaak_state_machine', glob('snaak_state_machine/utils/*'))
 
     ],
     install_requires=['setuptools'],
