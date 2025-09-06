@@ -26,6 +26,7 @@ class BreadLocalizationState(State):
     def __init__(self, node) -> None:
         super().__init__(outcomes=["succeeded", "failed"])
         self.node = node
+        
 
         self._traj_action_client = ActionClient(
             self.node, ExecuteTrajectory, "snaak_manipulation/execute_trajectory"
