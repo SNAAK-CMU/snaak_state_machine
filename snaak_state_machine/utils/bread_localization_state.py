@@ -21,6 +21,10 @@ from snaak_state_machine.utils.snaak_state_machine_utils import (
         save_image, enable_arm
         )
 import traceback
+import logging
+
+_PROFILING_LOGGER_NAME = 'profiling'
+profiling_logger = logging.getLogger(_PROFILING_LOGGER_NAME)
 
 class BreadLocalizationState(State):
     def __init__(self, node) -> None:
@@ -49,9 +53,11 @@ class BreadLocalizationState(State):
             time.sleep(2)  # Time delay due to transformation issues
 
             retries -= 1
+            profiling_logger.info(f"[STARTED] bread_localization (attempt {i+1}/{retries})")
             pickup_point = get_point_XYZ(
                 self.node, self._get_place_xyz_client, 5, pickup=False
             )
+            profiling_logger.info(f"[FINISHED] bread_localization (attempt {i+1}/{retries})")
 
             if pickup_point == None:
                 time.sleep(0.5)

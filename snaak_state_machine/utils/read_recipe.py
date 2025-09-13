@@ -22,6 +22,10 @@ from snaak_state_machine.utils.snaak_state_machine_utils import (
         )
 import traceback
 
+import logging
+_PROFILING_LOGGER_NAME = 'profiling'
+profiling_logger = logging.getLogger(_PROFILING_LOGGER_NAME)
+
 class ReadRecipe(State):
     def __init__(self, node) -> None:
         super().__init__(["loop", "start_recipe", "restock"])
@@ -32,6 +36,8 @@ class ReadRecipe(State):
 
     def execute(self, blackboard: Blackboard):
         yasmin.YASMIN_LOG_INFO("Reading Recipe")
+        profiling_logger.info(f"[STARTED NEW RECIPE]")
+        # Give some time for the user to read the console
         time.sleep(1)
 
         file_path = "/home/snaak/Documents/recipe/recipe.yaml"

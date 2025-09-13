@@ -21,6 +21,9 @@ from snaak_state_machine.utils.snaak_state_machine_utils import (
         save_image, enable_arm
         )
 import traceback
+import logging
+_PROFILING_LOGGER_NAME = 'profiling'
+profiling_logger = logging.getLogger(_PROFILING_LOGGER_NAME)
 
 class ReturnHomeState(State):
     def __init__(self, node) -> None:
@@ -34,7 +37,9 @@ class ReturnHomeState(State):
         yasmin.YASMIN_LOG_INFO("Executing state ReturnHome")
         goal_msg = ReturnHome.Goal()
 
+        profiling_logger.info(f"[STARTED] return_home")
         result = send_goal(self.node, self._reset_arm_client, goal_msg)
+
         if result == True:
             yasmin.YASMIN_LOG_INFO("Goal succeeded")
             return "succeeded"

@@ -21,7 +21,9 @@ from snaak_state_machine.utils.snaak_state_machine_utils import (
         save_image, enable_arm
         )
 import traceback
-
+import logging
+_PROFILING_LOGGER_NAME = 'profiling'
+profiling_logger = logging.getLogger(_PROFILING_LOGGER_NAME)
 
 class PreGraspState(State):
     def __init__(self, node) -> None:
@@ -46,7 +48,11 @@ class PreGraspState(State):
             blackboard["current_ingredient"] = "bread_bottom_slice"
             goal_msg.desired_location = "bin3"
             yasmin.YASMIN_LOG_INFO("bread bottom slice position")
+
+            profiling_logger.info(f"[STARTED] goto_pre_grasp for {blackboard['current_ingredient']}")
             result = send_goal(self.node, self._traj_action_client, goal_msg)
+            # profiling_logger.info(f"[FINISHED] goto_pre_grasp for {blackboard['current_ingredient']}")
+
             if result == True:
                 yasmin.YASMIN_LOG_INFO("Goal succeeded")
                 return "succeeded"
@@ -69,7 +75,11 @@ class PreGraspState(State):
             blackboard["current_ingredient"] = "bread_top_slice"
             goal_msg.desired_location = "bin3"
             yasmin.YASMIN_LOG_INFO("bread top slice position")
+
+            profiling_logger.info(f"[STARTED] goto_pre_grasp for {blackboard['current_ingredient']}")
             result = send_goal(self.node, self._traj_action_client, goal_msg)
+            # profiling_logger.info(f"[FINISHED] goto_pre_grasp for {blackboard['current_ingredient']}")
+
             if result == True:
                 yasmin.YASMIN_LOG_INFO("Goal succeeded")
                 return "succeeded"
@@ -86,7 +96,11 @@ class PreGraspState(State):
             blackboard["current_ingredient"] = "cheese"
             goal_msg.desired_location = "bin2"
             yasmin.YASMIN_LOG_INFO("cheese position")
+
+            profiling_logger.info(f"[STARTED] goto_pre_grasp for {blackboard['current_ingredient']}")
             result = send_goal(self.node, self._traj_action_client, goal_msg)
+            # profiling_logger.info(f"[FINISHED] goto_pre_grasp for {blackboard['current_ingredient']}")
+
             if result == True:
                 yasmin.YASMIN_LOG_INFO("Goal succeeded")
                 return "succeeded"
@@ -103,7 +117,10 @@ class PreGraspState(State):
             blackboard["current_ingredient"] = "ham"
             goal_msg.desired_location = "bin1"
             yasmin.YASMIN_LOG_INFO("ham position")
+
+            profiling_logger.info(f"[STARTED] goto_pre_grasp for {blackboard['current_ingredient']}")
             result = send_goal(self.node, self._traj_action_client, goal_msg)
+            # profiling_logger.info(f"[FINISHED] goto_pre_grasp for {blackboard['current_ingredient']}")
 
             if result == True:
                 yasmin.YASMIN_LOG_INFO("Goal succeeded")

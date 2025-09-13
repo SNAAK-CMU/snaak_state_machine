@@ -21,6 +21,10 @@ from snaak_state_machine.utils.snaak_state_machine_utils import (
         save_image, enable_arm
         )
 import traceback
+import logging
+
+_PROFILING_LOGGER_NAME = 'profiling'
+profiling_logger = logging.getLogger(_PROFILING_LOGGER_NAME)
 
 class PlaceState(State):
     def __init__(self, node) -> None:
@@ -67,7 +71,9 @@ class PlaceState(State):
             goal_msg.z = pickup_point.z + blackboard["ingredient_thickness"]
             goal_msg.ingredient_type = 1
 
+        profiling_logger.info(f"[STARTED] place of {blackboard['current_ingredient']}")
         result = send_goal(self.node, self._place_action_client, goal_msg)
+        # profiling_logger.info(f"[FINISHED] place of {blackboard['current_ingredient']}")
 
         # time.sleep(1) # Time delay for the weight scale
 
@@ -150,9 +156,12 @@ class PlaceState(State):
         if blackboard["current_ingredient"] == "bread_bottom_slice" and check_sandwich:
             ingredient_name = "bread_bottom"
 
+            profiling_logger.info(f"[STARTED] sandwich_check for {blackboard['current_ingredient']}")
             sandwich_check_response, sandwich_check_error = get_sandwich_check(
                 self.node, self._check_sandwitch_client, ingredient_name, placed_slices
             )
+            profiling_logger.info(f"[FINISHED] sandwich_check for {blackboard['current_ingredient']}")
+
             if sandwich_check_response == True:
                 blackboard["logger"].update(
                     blackboard["current_ingredient"], placed_slices)
@@ -163,9 +172,13 @@ class PlaceState(State):
 
         elif blackboard["current_ingredient"] == "bread_top_slice" and check_sandwich:
             ingredient_name = "bread_top"
+
+            profiling_logger.info(f"[STARTED] sandwich_check for {blackboard['current_ingredient']}")
             sandwich_check_response, sandwich_check_error = get_sandwich_check(
                 self.node, self._check_sandwitch_client, ingredient_name, placed_slices
             )
+            profiling_logger.info(f"[FINISHED] sandwich_check for {blackboard['current_ingredient']}")
+
             if sandwich_check_response == True:
                 blackboard["logger"].update(
                     blackboard["current_ingredient"], placed_slices
@@ -177,9 +190,11 @@ class PlaceState(State):
 
         elif check_sandwich:
             ingredient_name = blackboard["current_ingredient"]
+            profiling_logger.info(f"[STARTED] sandwich_check for {blackboard['current_ingredient']}")
             sandwich_check_response, sandwich_check_error = get_sandwich_check(
                 self.node, self._check_sandwitch_client, ingredient_name, placed_slices
             )
+            profiling_logger.info(f"[FINISHED] sandwich_check for {blackboard['current_ingredient']}")
 
             if sandwich_check_response == True:
                 blackboard["logger"].update(

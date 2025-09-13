@@ -9,6 +9,9 @@ from action_msgs.msg import GoalStatus
 from snaak_vision.srv import GetXYZFromImage, CheckIngredientPlace
 from std_srvs.srv import Trigger
 from snaak_weight_read.srv import ReadWeight
+import logging
+_PROFILING_LOGGER_NAME = 'profiling'
+profiling_logger = logging.getLogger(_PROFILING_LOGGER_NAME)
 
 class SandwichLogger():
     def __init__(self, ingredients):
@@ -101,6 +104,8 @@ def send_goal(node, action_client: ActionClient, action_goal):
     rclpy.spin_until_future_complete(node, result_future)
     result = result_future.result()
 
+
+    profiling_logger.info(f"[FINISHED] manipulation action")
     if result.status == GoalStatus.STATUS_SUCCEEDED:
         return True
     else:

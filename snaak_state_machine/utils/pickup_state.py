@@ -21,7 +21,9 @@ from snaak_state_machine.utils.snaak_state_machine_utils import (
         save_image, enable_arm
         )
 import traceback
-
+import logging
+_PROFILING_LOGGER_NAME = 'profiling'
+profiling_logger = logging.getLogger(_PROFILING_LOGGER_NAME)
 
 class PickupState(State):
     def __init__(self, node) -> None:
@@ -68,10 +70,11 @@ class PickupState(State):
         while retry_pickup <= pickup_tries:  # change this to try more pick ups
 
             pre_weight = get_weight(self.node, self._get_weight_bins)
-
+            profiling_logger.info(f"[STARTED] get {blackboard['current_ingredient']} pickup point (attempt {retry_pickup+1}/{pickup_tries})")
             pickup_point = get_point_XYZ(
                 self.node, self._get_pickup_xyz_client, ingredient_number, pickup=True
             )
+            profiling_logger.info(f"[FINISHED] get {blackboard['current_ingredient']} pickup point (attempt {retry_pickup+1}/{pickup_tries})")
 
             if pickup_point == None:
                 yasmin.YASMIN_LOG_INFO("retrying pickup")
@@ -94,7 +97,10 @@ class PickupState(State):
                     + "moving to the next ingredient"
                 )
                 goal_msg = ReturnHome.Goal()
+                profiling_logger.info(f"[STARTED] reset arm after {blackboard['current_ingredient']} pickup failure")
                 result = send_goal(self.node, self._reset_arm_client, goal_msg)
+                # profiling_logger.info(f"[FINISHED] reset arm after {blackboard['current_ingredient']} pickup failure")
+
                 # Home
                 if result == True:
                     yasmin.YASMIN_LOG_INFO("Goal succeeded")
@@ -123,9 +129,9 @@ class PickupState(State):
             # for pickup of sliced ingredients
             goal_msg.ingredient_type = 1
             goal_msg.bin_id = ingredient_number
-
+            profiling_logger.info(f"[STARTED] {blackboard['current_ingredient']} pickup (attempt {retry_pickup+1}/{pickup_tries})")
             result = send_goal(self.node, self._pickup_action_client, goal_msg)
-
+            # profiling_logger.info(f"[FINISHED] {blackboard['current_ingredient']} pickup (attempt {retry_pickup+1}/{pickup_tries})")
             time.sleep(1) # Wait for weight scale
 
             curr_weight = get_weight(self.node, self._get_weight_bins)

@@ -21,7 +21,9 @@ from snaak_state_machine.utils.snaak_state_machine_utils import (
         save_image, enable_arm
         )
 import traceback
-
+import logging
+_PROFILING_LOGGER_NAME = 'profiling'
+profiling_logger = logging.getLogger(_PROFILING_LOGGER_NAME)
 
 
 class PrePlaceState(State):
@@ -39,7 +41,9 @@ class PrePlaceState(State):
 
         goal_msg.desired_location = "assembly"
 
+        profiling_logger.info(f"[STARTED] goto_pre_place for {blackboard['current_ingredient']}")
         result = send_goal(self.node, self._traj_action_client, goal_msg)
+        # profiling_logger.info(f"[FINISHED] goto_pre_place for {blackboard['current_ingredient']}")
 
         if result == True:
             yasmin.YASMIN_LOG_INFO("Goal succeeded")
