@@ -65,9 +65,9 @@ def main():
         "Recipe",
         ReadRecipe(node),
         transitions={
-            "loop": "Recipe",
+            # "loop": "Recipe",
             "start_recipe": "PreGrasp",
-            "restock": "Restock",
+            # "restock": "Restock",
         },
     )
 

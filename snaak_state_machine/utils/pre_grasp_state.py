@@ -115,6 +115,7 @@ class PreGraspState(State):
 
         # When the recipe is finished, save the data to the yaml file
 
+        # change this wrt new stock.yaml
         file_path = "/home/snaak/Documents/recipe/stock.yaml"
         blackboard["ingredient_list"] = ["cheese", "ham", "bread"]
         stock_data = {}
