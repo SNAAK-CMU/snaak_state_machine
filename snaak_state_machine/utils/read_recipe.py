@@ -30,8 +30,10 @@ class ReadRecipe(State):
         self.reset_sandwich_checker_client = self.node.create_client(
             Trigger, "/snaak_vision/reset_sandwich_checker"
         )
-        self.start_recipe = False
-        self.start_restock = False
+        
+        #TODO: change this back to false later to start the recipe through the ui
+        self.start_recipe = True
+        self.start_restock = True
         self.start_recipe_subscriber = self.node.create_subscription(Bool, 
                                                                      '/snaak_ui/start_recipe', 
                                                                      self.start_recipe_callback, 
@@ -79,11 +81,16 @@ class ReadRecipe(State):
             if "bread_center_coordinate" not in blackboard:
                         blackboard["bread_center_coordinate"] = None
 
-                    
+            print('test') 
             reset_sandwich_checker(self.node, self.reset_sandwich_checker_client)
+            print('test')
             yasmin.YASMIN_LOG_INFO("Resetting sandwich checker")
 
             next_state = "start_recipe"
+
+            #TODO: change this back to false later to start the recipe through the ui
+            # self.start_recipe = False
+            # self.start_restock = False
 
         return next_state
 

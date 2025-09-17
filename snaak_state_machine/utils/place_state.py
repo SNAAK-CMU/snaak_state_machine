@@ -1,3 +1,4 @@
+from re import I
 import time
 import rclpy
 import yaml
@@ -44,7 +45,7 @@ class PlaceState(State):
         goal_msg = Place.Goal()
         pre_weight = get_weight(self.node, self._get_weight_assembly)
 
-        if blackboard["current_ingredient"] == "bread_bottom_slice":
+        if blackboard['stock'][blackboard['current_ingredient']]['type'] == "bread" and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 1:
             goal_msg.x = blackboard["tray_center_coordinate"]["x"]
             goal_msg.y = blackboard["tray_center_coordinate"]["y"]
             goal_msg.z = (
@@ -53,7 +54,7 @@ class PlaceState(State):
             )
             goal_msg.ingredient_type = 1
 
-        elif blackboard["current_ingredient"] == "bread_top_slice":
+        elif blackboard['stock'][blackboard['current_ingredient']]['type'] == "bread" and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 0:
             pickup_point = blackboard["bread_center_coordinate"]
             goal_msg.x = pickup_point.x
             goal_msg.y = pickup_point.y
@@ -76,30 +77,26 @@ class PlaceState(State):
         placed_slices = 1
         check_sandwich = False
 
-        if "bread" in blackboard["current_ingredient"]:
-            curr_ingredient_weight_per_slice = blackboard["bread_weight_per_slice"]
-        else:
-            curr_ingredient_weight_per_slice = blackboard[f"{blackboard['current_ingredient']}_weight_per_slice"]
+        # if "bread" in blackboard["current_ingredient"]:
+        #     curr_ingredient_weight_per_slice = blackboard["bread_weight_per_slice"]
+        # else:
+        #     curr_ingredient_weight_per_slice = blackboard[f"{blackboard['current_ingredient']}_weight_per_slice"]
+
+        curr_ingredient_weight_per_slice = blackboard["recipe"][blackboard['current_ingredient']]['weight_per_slice'] 
 
         if curr_weight - pre_weight < curr_ingredient_weight_per_slice * 0.2:
             blackboard["retry_place"] += 1
             yasmin.YASMIN_LOG_INFO("Failed to place the ingredient, retrying...")
-            print(" ##############################################")
-            print(f"Retry attempt {blackboard['retry_place']}")
-            print(" ##############################################")
 
             if blackboard["retry_place"] == 3:
-                print(" ##############################################")
-                print("Max retry attempts reached, moving to next ingredient")
-                print(" ##############################################")
-
-                if blackboard["current_ingredient"] == "bread_bottom_slice":
+                if blackboard['stock'][blackboard['current_ingredient']]['type'] == "bread" and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 1:
+                # if blackboard["current_ingredient"] == "bread_bottom_slice":
                     yasmin.YASMIN_LOG_INFO(
                         "Aborting task: Failed to place bread bottom slice"
                     )
                     return "failed"
                 else:
-                    blackboard[blackboard["current_ingredient"]] = 0
+                    # blackboard[blackboard["current_ingredient"]] = 0
                     return "next_ingredient"
 
             if (

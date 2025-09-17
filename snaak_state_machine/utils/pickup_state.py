@@ -53,24 +53,14 @@ class PickupState(State):
         retry_pickup = 0
         time.sleep(2)  # Time delay due to transformation issues
         pickup_tries = 3
-        if blackboard["current_ingredient"] == "bread_bottom_slice":
-            ingredient_number = 3
-
-        if blackboard["current_ingredient"] == "cheese":
-            ingredient_number = 2
-
-        if blackboard["current_ingredient"] == "ham":
-            ingredient_number = 1
-
-        if blackboard["current_ingredient"] == "bread_top_slice":
-            ingredient_number = 3
 
         while retry_pickup <= pickup_tries:  # change this to try more pick ups
 
             pre_weight = get_weight(self.node, self._get_weight_bins)
 
             pickup_point = get_point_XYZ(
-                self.node, self._get_pickup_xyz_client, ingredient_number, pickup=True
+                self.node, self._get_pickup_xyz_client, blackboard['stock'][blackboard['current_ingredient']]['type'],
+                int(blackboard['stock'][blackboard['current_ingredient']]['bin']), pickup=True
             )
 
             if pickup_point == None:
@@ -79,11 +69,11 @@ class PickupState(State):
                 save_image(self.node, self._save_image_client)
                 retry_pickup += 1
 
-            if (retry_pickup == pickup_tries and blackboard["current_ingredient"] == "bread_bottom_slice"):
-                yasmin.YASMIN_LOG_INFO("Aborting task: Failed to identify bread botton slice")
+            if (retry_pickup == pickup_tries and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 1):
+                yasmin.YASMIN_LOG_INFO("Aborting task: Failed to identify bread bottom slice")
                 return "failed"
-            
-            if (retry_pickup == pickup_tries and blackboard["current_ingredient"] == "bread_top_slice"):
+
+            if (retry_pickup == pickup_tries and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 0):
                 yasmin.YASMIN_LOG_INFO("Aborting task: Failed to identify bread top slice")
                 return "failed"
 
@@ -98,16 +88,13 @@ class PickupState(State):
                 # Home
                 if result == True:
                     yasmin.YASMIN_LOG_INFO("Goal succeeded")
-                    # TODO add a flag that denotes that you have not successfully picked up an igredient and tag the sandiwch as a failure
-                    blackboard["logger"].update(blackboard["current_ingredient"], 0)
-                    if blackboard["current_ingredient"] == "bread_bottom_slice":
-                        blackboard["bread_bottom_slice"] = False
-                    elif blackboard["current_ingredient"] == "bread_top_slice":
-                        blackboard["bread_top_slice"] = False
-                    else:
-                        blackboard[
-                            f"{blackboard['current_ingredient']}"
-                        ] -= 1  # Updates the recipe
+                    # TODO this logic needs to be fixed 
+                    if blackboard["current_ingredient_type"] == "bread" and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 1 :
+                        blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] += 1
+                    elif blackboard["current_ingredient_type"] == "bread" and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 0 :
+                        blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] += 1
+                    # else:
+                    #     blackboard[f"{blackboard['current_ingredient']}"] -= 1  # Updates the recipe
                     return "next_ingredient"
                 else:
                     yasmin.YASMIN_LOG_INFO(f"Goal failed with status {True}")
@@ -116,14 +103,14 @@ class PickupState(State):
             if pickup_point == None:
                 time.sleep(1.0) # Time sleep betweeen pickups
                 continue
-
+            
+            ### pikcup action
             goal_msg.x = pickup_point.x
             goal_msg.y = pickup_point.y
             goal_msg.z = pickup_point.z
             # for pickup of sliced ingredients
             goal_msg.ingredient_type = 1
-            goal_msg.bin_id = ingredient_number
-
+            goal_msg.bin_id = int(blackboard["stock"][blackboard['current_ingredient']]['bin'])
             result = send_goal(self.node, self._pickup_action_client, goal_msg)
 
             time.sleep(1) # Wait for weight scale
@@ -148,14 +135,8 @@ class PickupState(State):
                 retry_pickup = 0
                 weight_delta = pre_weight - curr_weight
                 try:
-                    picked_slices = int(
-                        np.round(
-                            weight_delta
-                            / blackboard[
-                                f"{blackboard['current_ingredient']}_weight_per_slice"
-                            ]
-                        )
-                    )
+                    # picked_slices = int(np.round(weight_delta/ blackboard[f"{blackboard['current_ingredient']}_weight_per_slice"]))
+                    picked_slices = int(np.round(weight_delta/ blackboard['stock'][blackboard['current_ingredient']]['weight_per_slice']))
                     picked_slices = max(picked_slices, 0) # Check for negative numbers
                     print('##################')  
                     print(picked_slices)
@@ -169,13 +150,14 @@ class PickupState(State):
                     f"Picked {picked_slices} slices of {blackboard['current_ingredient']}"
                 )
 
-                if "bread" in blackboard["current_ingredient"]:
-                    blackboard["bread_slices"] -= picked_slices  # Updates the stock
-                else:
-                    blackboard[
-                        f"{blackboard['current_ingredient']}_slices"
-                    ] -= picked_slices  # Updates the stock
-                    # TODO we need to save the updated number of slices to the yaml file
+                #TODO: update the stock to the stock.yaml file here
+                # if "bread" in blackboard["current_ingredient"]:
+                #     blackboard["bread_slices"] -= picked_slices  # Updates the stock
+                # else:
+                #     blackboard[
+                #         f"{blackboard['current_ingredient']}_slices"
+                #     ] -= picked_slices  # Updates the stock
+                #     # TODO we need to save the updated number of slices to the yaml file
 
             if result == True:
                 yasmin.YASMIN_LOG_INFO("Goal succeeded")

@@ -1,7 +1,15 @@
-import yaml
+from __future__ import annotations
 import os
+import yaml
 from pathlib import Path
 from typing import Dict,Any
+from dataclasses import dataclass
+from typing import Dict, List, Tuple, Iterable, Optional
+from collections import Counter
+import yaml
+from copy import deepcopy
+
+
 
 stock_file_path = "/home/snaak/Documents/recipe/stock.yaml"
 
@@ -118,12 +126,11 @@ def load_stock_dict(yaml_path: str) -> Dict[str, Dict[str, Any]]:
         }
     return stock
 
+
+# ---------- dataclasses ----------
+
+
 if __name__ == "__main__":
-
-    print("Recipe:")
-    recipe = load_recipe_dict(RECIPE_YAML_PATH)
-    print(recipe)
-
-    print("\nStock:")
-    stock = load_stock_dict(stock_file_path)
-    print(stock['cheddar']['slices'])
+    all_breads = [k for k, v in stock.items() if v.get('type') == 'bread' and k in list(recipe.keys())]
+    # print(recipe[all_breads[0]]['slices_req'])
+    print(all_breads)

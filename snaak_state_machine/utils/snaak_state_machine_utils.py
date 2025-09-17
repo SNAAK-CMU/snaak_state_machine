@@ -11,7 +11,7 @@ from std_srvs.srv import Trigger
 from snaak_weight_read.srv import ReadWeight
 from pathlib import Path
 import yaml
-from typing import Dict,Any
+from typing import Dict,Any, List
 
 class SandwichLogger():
     def __init__(self, ingredients):
@@ -169,6 +169,12 @@ def load_stock_dict(yaml_path: str) -> Dict[str, Dict[str, Any]]:
         }
     return stock
 
+def get_ingredient(stock: Dict[str, Dict[str, Any]],  recipe_keys: List[str], ingredient_type: str) -> List[str]:
+
+    ingredient = [k for k, v in stock.items() if v.get('type') == ingredient_type and k in recipe_keys]
+    
+    return ingredient
+
 def send_goal(node, action_client: ActionClient, action_goal):
     """
     Sends a goal to an action server and waits for the result.
@@ -204,7 +210,7 @@ def send_goal(node, action_client: ActionClient, action_goal):
         return False
 
 
-def get_point_XYZ(node, service_client, location, pickup):
+def get_point_XYZ(node, service_client, ingredient_name, location, pickup):
     """
     Retrieves the XYZ coordinates of a specified location using a vision service.
     This function sends a request to a vision service to obtain the XYZ coordinates
@@ -225,7 +231,7 @@ def get_point_XYZ(node, service_client, location, pickup):
 
     # changing this to make it easier to pass values, unify data types between vision and manipulation for bin locations
     coordRequest.location_id = int(location)
-
+    coordRequest.ingredient_name = ingredient_name
     coordRequest.timestamp = 1.0  # change this to current time for sync
 
     if pickup:

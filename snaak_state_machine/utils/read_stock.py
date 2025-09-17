@@ -32,12 +32,12 @@ class ReadStock(State):
     def execute(self, blackboard):
         yasmin.YASMIN_LOG_INFO("Reading Stock")
         stock_file_path = "/home/snaak/Documents/recipe/stock.yaml"
-
         if os.path.exists(stock_file_path):
             try:
                 stock = load_stock_dict(stock_file_path)
                 blackboard['stock'] = stock
                 blackboard['stock_keys'] = list(stock.keys())
+                return "succeeded"
 
             except Exception as e:
                 yasmin.YASMIN_LOG_INFO(f"Error reading the recipe file: {e}")
