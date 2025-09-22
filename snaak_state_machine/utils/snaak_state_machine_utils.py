@@ -169,6 +169,40 @@ def load_stock_dict(yaml_path: str) -> Dict[str, Dict[str, Any]]:
         }
     return stock
 
+def update_stock_yaml(stock_dict: Dict[str, Dict[str, Any]], yaml_path: str) -> None:
+    """
+    Updates the stock.yaml file with the provided stock_dict.
+    The format of stock_dict should match the output of load_stock_dict:
+        {
+            'cheddar': {'slices': 4, 'bin': 1, 'type': 'cheese', 'weight_per_slice': 20.5},
+            'ham': {...},
+            ...
+        }
+    The YAML will be written in the format:
+    ingredients:
+      cheddar:
+        slices: 4
+        bin: 1
+        type: cheese
+        weight_per_slice: 20.5
+      ham:
+        ...
+    """
+    data = {"ingredients": {}}
+    for name, info in stock_dict.items():
+        # Ensure all expected keys are present
+        data["ingredients"][name] = {
+            "slices": int(info.get("slices", 0)),
+            "bin": int(info.get("bin", 0)),
+            "type": str(info.get("type", "")),
+            "weight_per_slice": float(info.get("weight_per_slice", 0.0)),
+        }
+    with open(yaml_path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(data, f, sort_keys=False)
+
+# Example usage:
+# update_stock_yaml(stock, "/home/snaak/Documents/recipe/stock.yaml")
+
 def get_ingredient(stock: Dict[str, Dict[str, Any]],  recipe_keys: List[str], ingredient_type: str) -> List[str]:
 
     ingredient = [k for k, v in stock.items() if v.get('type') == ingredient_type and k in recipe_keys]

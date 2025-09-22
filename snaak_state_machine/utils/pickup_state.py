@@ -69,11 +69,11 @@ class PickupState(State):
                 save_image(self.node, self._save_image_client)
                 retry_pickup += 1
 
-            if (retry_pickup == pickup_tries and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 1):
+            if (retry_pickup == pickup_tries and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 1): #bottom slice
                 yasmin.YASMIN_LOG_INFO("Aborting task: Failed to identify bread bottom slice")
                 return "failed"
 
-            if (retry_pickup == pickup_tries and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 0):
+            if (retry_pickup == pickup_tries and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 0): #top slice
                 yasmin.YASMIN_LOG_INFO("Aborting task: Failed to identify bread top slice")
                 return "failed"
 
@@ -88,13 +88,14 @@ class PickupState(State):
                 # Home
                 if result == True:
                     yasmin.YASMIN_LOG_INFO("Goal succeeded")
-                    # TODO this logic needs to be fixed 
-                    if blackboard["current_ingredient_type"] == "bread" and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 1 :
-                        blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] += 1
-                    elif blackboard["current_ingredient_type"] == "bread" and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 0 :
-                        blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] += 1
+                    # TODO this logic needs to be fixed and tested properly 
+                    # if blackboard["current_ingredient_type"] == "bread" and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 1 :
+                    #     blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] += 1
+                    # elif blackboard["current_ingredient_type"] == "bread" and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 0 :
+                    #     blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] += 1
                     # else:
                     #     blackboard[f"{blackboard['current_ingredient']}"] -= 1  # Updates the recipe
+                    # blackboard['stock'][blackboard['current_ingredient']]['slices_req'] -= 1
                     return "next_ingredient"
                 else:
                     yasmin.YASMIN_LOG_INFO(f"Goal failed with status {True}")
@@ -139,8 +140,7 @@ class PickupState(State):
                     picked_slices = int(np.round(weight_delta/ blackboard['stock'][blackboard['current_ingredient']]['weight_per_slice']))
                     picked_slices = max(picked_slices, 0) # Check for negative numbers
                     print('##################')  
-                    print(picked_slices)
-                    print('##################')
+
                 except:
                     picked_slices = 1
                     traceback.print_exc()
@@ -151,6 +151,8 @@ class PickupState(State):
                 )
 
                 #TODO: update the stock to the stock.yaml file here
+                blackboard['stock'][blackboard['current_ingredient']]['slices'] -= picked_slices
+
                 # if "bread" in blackboard["current_ingredient"]:
                 #     blackboard["bread_slices"] -= picked_slices  # Updates the stock
                 # else:

@@ -18,7 +18,7 @@ from snaak_vision.srv import GetXYZFromImage, CheckIngredientPlace
 from snaak_state_machine.utils.snaak_state_machine_utils import (
         SandwichLogger, send_goal, get_point_XYZ, get_weight,
         get_sandwich_check, disable_arm, disable_vacuum, reset_sandwich_checker,
-        save_image, enable_arm, get_ingredient
+        save_image, enable_arm, get_ingredient, update_stock_yaml
         )
 import traceback
 
@@ -44,9 +44,7 @@ class PreGraspState(State):
 
             blackboard['current_ingredient_type'] = blackboard['stock'][bread_key[0]]['type']
             blackboard['current_ingredient'] = bread_key[0]
-            print('#################33')
-            print(blackboard['stock'][blackboard['current_ingredient']]['bin'])
-            print('#################33')
+
             # I think this needs to be here and in pick up incase it fails and in place incase the fails
             blackboard['recipe'][bread_key[0]]['slices_req'] -= 1
             print(blackboard['recipe'][bread_key[0]]['slices_req'])
@@ -119,7 +117,8 @@ class PreGraspState(State):
         # When the recipe is finished, save the data to the yaml file
 
         # TODO: save the new data structure to the stock.yaml file
-        # file_path = "/home/snaak/Documents/recipe/stock.yaml"
+        file_path = "/home/snaak/Documents/recipe/stock.yaml"
+
         # blackboard["ingredient_list"] = ["cheese", "ham", "bread"]
         # stock_data = {}
 
@@ -141,9 +140,9 @@ class PreGraspState(State):
 
         # # Write the updated stock to the file
         # with open(file_path, "w") as file:
-        #     yaml.dump(stock, file, default_flow_style=False)
-
-        # yasmin.YASMIN_LOG_INFO("Recipe data saved to stock.yaml")
+        #     yaml.dump(stock, file, default_flow_style=False)k
+        update_stock_yaml(blackboard['stock'],file_path)
+        yasmin.YASMIN_LOG_INFO("Recipe data saved to stock.yaml")
 
         return "finished"
 
