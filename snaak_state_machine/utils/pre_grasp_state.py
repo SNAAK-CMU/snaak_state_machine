@@ -41,6 +41,7 @@ class PreGraspState(State):
         bread_key = get_ingredient(blackboard["stock"], blackboard["recipe_keys"], "bread")
         cheese_key = get_ingredient(blackboard["stock"], blackboard["recipe_keys"], "cheese")
         meat_key = get_ingredient(blackboard["stock"], blackboard["recipe_keys"], "meat")
+        shredded_key = get_ingredient(blackboard["stock"], blackboard["recipe_keys"], "shredded")
         yasmin.YASMIN_LOG_INFO("Executing state PreGrasp")
         goal_msg = ExecuteTrajectory.Goal()
         
@@ -115,6 +116,32 @@ class PreGraspState(State):
                 move_soft_gripper(self.node, self.set_position_publisher, blackboard['current_ingredient_type']) 
                 goal_msg.desired_location = "bin" + str(blackboard['stock'][current_meat]['bin'])
                 yasmin.YASMIN_LOG_INFO("ham position")
+                result = send_goal(self.node, self._traj_action_client, goal_msg)
+
+                if result == True:
+                    yasmin.YASMIN_LOG_INFO("Goal succeeded")
+                    return "succeeded"
+                else:
+                    yasmin.YASMIN_LOG_INFO(f"Goal failed with status {True}")
+                    return "failed"
+                
+        for current_shredded in shredded_key:
+
+            if blackboard["recipe"][current_shredded]['slices_req'] <= 0:
+                continue
+
+            if blackboard["recipe"][current_shredded]['slices_req'] > 0:
+                blackboard['current_ingredient'] = current_shredded
+                blackboard['current_ingredient_type'] = blackboard['stock'][current_shredded]['type']
+                
+                #Check if the shredded is available in stock
+                if blackboard['stock'][blackboard['current_ingredient']]['weight'] <= 0:
+                    yasmin.YASMIN_LOG_INFO(f"{current_shredded} is out of stock")
+                    return "next_ingredient"
+
+                move_soft_gripper(self.node, self.set_position_publisher, blackboard['current_ingredient_type']) 
+                goal_msg.desired_location = "bin" + str(blackboard['stock'][current_shredded]['bin'])
+                yasmin.YASMIN_LOG_INFO("shredded position")
                 result = send_goal(self.node, self._traj_action_client, goal_msg)
 
                 if result == True:

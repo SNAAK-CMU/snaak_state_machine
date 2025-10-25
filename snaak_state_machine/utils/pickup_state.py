@@ -21,6 +21,7 @@ from snaak_state_machine.utils.snaak_state_machine_utils import (
         save_image, enable_arm
         )
 import traceback
+from types import SimpleNamespace
 
 
 class PickupState(State):
@@ -66,10 +67,14 @@ class PickupState(State):
                 yasmin.YASMIN_LOG_INFO("Invalid bin number for weight reading")
                 return "failed"
 
-            pickup_point = get_point_XYZ(
-                self.node, self._get_pickup_xyz_client, blackboard['stock'][blackboard['current_ingredient']]['type'],
-                int(blackboard['stock'][blackboard['current_ingredient']]['bin']), pickup=True
-            )
+            if blackboard['current_ingredient_type'] == "shredded":
+                # create a default pickup point at origin (0,0,0)
+                pickup_point = SimpleNamespace(x=0.0, y=0.0, z=-0.03)
+            else:
+                pickup_point = get_point_XYZ(
+                    self.node, self._get_pickup_xyz_client, blackboard['stock'][blackboard['current_ingredient']]['type'],
+                    int(blackboard['stock'][blackboard['current_ingredient']]['bin']), pickup=True
+                )
 
             if pickup_point == None:
                 yasmin.YASMIN_LOG_INFO("retrying pickup")
@@ -119,7 +124,10 @@ class PickupState(State):
             goal_msg.y = pickup_point.y
             goal_msg.z = pickup_point.z
             # for pickup of sliced ingredients
-            goal_msg.ingredient_type = 1
+            if blackboard['current_ingredient_type'] == "shredded":
+                goal_msg.ingredient_type = 2
+            else:
+                goal_msg.ingredient_type = 1
             goal_msg.bin_id = int(blackboard["stock"][blackboard['current_ingredient']]['bin'])
             result = send_goal(self.node, self._pickup_action_client, goal_msg)
 
@@ -137,50 +145,67 @@ class PickupState(State):
                 f"Delta in placement weight {pre_weight-curr_weight}"
             )
 
-            if pre_weight - curr_weight <= 4.0:
+            # -------------------------------------------------------------------------------------
+            # --------------------- Check weight for shredded else check for sliced ---------------
+            # -------------------------------------------------------------------------------------
+            if blackboard['current_ingredient_type'] == "shredded":
+                if pre_weight - curr_weight <= 5:   # If it is bellow 5 grams (as per requirement) then we need to retry
 
-                # disabled vacuum
-                disable_vacuum(self.node, self._disable_vacuum_client)
-                yasmin.YASMIN_LOG_INFO("Vacuum Disabled")
-                save_image(self.node, self._save_image_client)
-                yasmin.YASMIN_LOG_INFO("Failed to pick up the ingredient, retrying...")
+                    # disabled vacuum
+                    disable_vacuum(self.node, self._disable_vacuum_client)
+                    yasmin.YASMIN_LOG_INFO("Vacuum Disabled")
+                    save_image(self.node, self._save_image_client)
+                    yasmin.YASMIN_LOG_INFO("Failed to pick up the ingredient, retrying...")
+                    #TODO Here we can get set the next serving to be a full serving as per recipe or we can subtract the recipe weight from the picked up weight to only pick up the remaining
+                    retry_pickup += 1
+                    continue
 
-                retry_pickup += 1
-                continue
+                else:
+                    retry_pickup = 0
+                    weight_delta = pre_weight - curr_weight
+                    blackboard["picked_weight"] = weight_delta
+
+                    yasmin.YASMIN_LOG_INFO(
+                        f"Picked weight {weight_delta}g of {blackboard['current_ingredient']}"
+                    )
+                    blackboard['stock'][blackboard['current_ingredient']]['weight'] -= weight_delta
 
             else:
-                retry_pickup = 0
-                weight_delta = pre_weight - curr_weight
-                try:
-                    # picked_slices = int(np.round(weight_delta/ blackboard[f"{blackboard['current_ingredient']}_weight_per_slice"]))
-                    picked_slices = int(np.round(weight_delta/ blackboard['stock'][blackboard['current_ingredient']]['weight_per_slice']))
-                    picked_slices = max(picked_slices, 0) # Check for negative numbers
- 
+                if pre_weight - curr_weight <= 4.0:
 
-                except:
-                    picked_slices = 1
-                    traceback.print_exc()
-                blackboard["picked_slices"] = picked_slices
+                    # disabled vacuum
+                    disable_vacuum(self.node, self._disable_vacuum_client)
+                    yasmin.YASMIN_LOG_INFO("Vacuum Disabled")
+                    save_image(self.node, self._save_image_client)
+                    yasmin.YASMIN_LOG_INFO("Failed to pick up the ingredient, retrying...")
 
-                yasmin.YASMIN_LOG_INFO(
-                    f"Picked {picked_slices} slices of {blackboard['current_ingredient']}"
-                )
+                    retry_pickup += 1
+                    continue
 
-                #TODO: update the stock to the stock.yaml file here
-                blackboard['stock'][blackboard['current_ingredient']]['slices'] -= picked_slices
+                else:
+                    retry_pickup = 0
+                    weight_delta = pre_weight - curr_weight
+                    try:
+                        # picked_slices = int(np.round(weight_delta/ blackboard[f"{blackboard['current_ingredient']}_weight_per_slice"]))
+                        picked_slices = int(np.round(weight_delta/ blackboard['stock'][blackboard['current_ingredient']]['weight_per_slice']))
+                        picked_slices = max(picked_slices, 0) # Check for negative numbers
+                    except:
+                        picked_slices = 1
+                        traceback.print_exc()
+                    blackboard["picked_slices"] = picked_slices
 
-                # if "bread" in blackboard["current_ingredient"]:
-                #     blackboard["bread_slices"] -= picked_slices  # Updates the stock
-                # else:
-                #     blackboard[
-                #         f"{blackboard['current_ingredient']}_slices"
-                #     ] -= picked_slices  # Updates the stock
-                #     # TODO we need to save the updated number of slices to the yaml file
+                    yasmin.YASMIN_LOG_INFO(
+                        f"Picked {picked_slices} slices of {blackboard['current_ingredient']}"
+                    )
+                    blackboard['stock'][blackboard['current_ingredient']]['slices'] -= picked_slices
+
 
             if result == True:
                 yasmin.YASMIN_LOG_INFO("Goal succeeded")
                 if "bread" in blackboard["current_ingredient"]:
                     blackboard["ingredient_thickness"] += 0.01
+                elif blackboard['current_ingredient_type'] == "shredded":
+                    blackboard["ingredient_thickness"] += 0.02   #TODO adjust thickness per weight picked
                 else:
                     blackboard["ingredient_thickness"] += 0.007 * picked_slices
                 return "succeeded"

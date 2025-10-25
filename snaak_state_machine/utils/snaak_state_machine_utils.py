@@ -161,6 +161,8 @@ def load_stock_dict(yaml_path: str) -> Dict[str, Dict[str, Any]]:
             bin_id = int(info.get("bin", 0))
             type_ = str(info.get("type", ""))
             wps = float(info.get("weight_per_slice", 0.0))
+            weight = float(info.get("weight", 0.0))
+            weight_per_serving = float(info.get("weight_per_serving", 0.0))
         except (TypeError, ValueError) as e:
             raise ValueError(f"Bad field types for ingredient '{name}': {e}")
         stock[name] = {
@@ -168,6 +170,8 @@ def load_stock_dict(yaml_path: str) -> Dict[str, Dict[str, Any]]:
             "bin": bin_id,
             "type": type_,
             "weight_per_slice": wps,
+            "weight": weight,
+            "weight_per_serving": weight_per_serving,
         }
     return stock
 
@@ -193,11 +197,19 @@ def update_stock_yaml(stock_dict: Dict[str, Dict[str, Any]], yaml_path: str) -> 
     data = {"ingredients": {}}
     for name, info in stock_dict.items():
         # Ensure all expected keys are present
-        data["ingredients"][name] = {
-            "slices": int(info.get("slices", 0)),
-            "bin": int(info.get("bin", 0)),
-            "type": str(info.get("type", "")),
-            "weight_per_slice": float(info.get("weight_per_slice", 0.0)),
+        if str(info.get("type")) != "shredded":
+            data["ingredients"][name] = {
+                "slices": int(info.get("slices", 0)),
+                "bin": int(info.get("bin", 0)),
+                "type": str(info.get("type", "")),
+                "weight_per_slice": float(info.get("weight_per_slice", 0.0)),
+        }
+        else:
+            data["ingredients"][name] = {
+                "weight": int(info.get("weight", 0)),
+                "bin": int(info.get("bin", 0)),
+                "type": str(info.get("type", "")),
+                "weight_per_serving": float(info.get("weight_per_serving", 0.0)),
         }
     with open(yaml_path, "w", encoding="utf-8") as f:
         yaml.safe_dump(data, f, sort_keys=False)

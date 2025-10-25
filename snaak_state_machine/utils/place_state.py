@@ -61,6 +61,13 @@ class PlaceState(State):
             goal_msg.z = pickup_point.z + blackboard["ingredient_thickness"]
             goal_msg.ingredient_type = 1
 
+        elif blackboard['stock'][blackboard['current_ingredient']]['type']  == "shredded":
+            pickup_point = blackboard["bread_center_coordinate"]
+            goal_msg.x = pickup_point.x
+            goal_msg.y = pickup_point.y
+            goal_msg.z = pickup_point.z + blackboard["ingredient_thickness"]
+            goal_msg.ingredient_type = 2
+
         else:
             pickup_point = blackboard["bread_center_coordinate"]
             goal_msg.x = pickup_point.x
@@ -68,6 +75,7 @@ class PlaceState(State):
             goal_msg.z = pickup_point.z + blackboard["ingredient_thickness"]
             goal_msg.ingredient_type = 1
 
+        print(f"Placing at x:{goal_msg.x}, y:{goal_msg.y}, z:{goal_msg.z}")
         result = send_goal(self.node, self._place_action_client, goal_msg)
 
         # time.sleep(1) # Time delay for the weight scale
@@ -82,83 +90,107 @@ class PlaceState(State):
         # else:
         #     curr_ingredient_weight_per_slice = blackboard[f"{blackboard['current_ingredient']}_weight_per_slice"]
 
-        curr_ingredient_weight_per_slice = blackboard["stock"][blackboard['current_ingredient']]['weight_per_slice'] 
+        # Check weight for shredded separately
+        if blackboard['stock'][blackboard['current_ingredient']]['type'] == "shredded":
 
-        if curr_weight - pre_weight < curr_ingredient_weight_per_slice * 0.2:
-            blackboard["retry_place"] += 1
-            yasmin.YASMIN_LOG_INFO("Failed to place the ingredient, retrying...")
+            weight_per_serving = blackboard["stock"][blackboard['current_ingredient']]['weight_per_serving'] 
 
-            if blackboard["retry_place"] == 3:
-                if blackboard['stock'][blackboard['current_ingredient']]['type'] == "bread" and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 2:
-                # if blackboard["current_ingredient"] == "bread_bottom_slice":
-                    yasmin.YASMIN_LOG_INFO(
-                        "Aborting task: Failed to place bread bottom slice"
-                    )
-                    return "failed"
-                else:
-                    # TODO: can make this zero if problems arise with placement
-                    # blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] -= 1
-                    # blackboard[blackboard["current_ingredient"]] = 0
-                    #TODO if we already tried 3 times to place and failed, we should move to next ingredient
-                    # for this we need to set the recipe req slices to 0
+            if curr_weight - pre_weight < weight_per_serving-5: # 5 grams off tolerance
+                blackboard["retry_place"] += 1
+                yasmin.YASMIN_LOG_INFO("Failed to place the ingredient, retrying...")
+
+                if blackboard["retry_place"] == 3:
+
                     blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] = 0
                     yasmin.YASMIN_LOG_INFO(
                         "Moving to the next ingredient in the recipe"
                     )
                     return "next_ingredient"
-                    
-            return "retry"
-    
-            # if (
-            #     blackboard["current_ingredient"] == "bread_top_slice"
-            #     or blackboard["current_ingredient"] == "bread_bottom_slice"
-            # ):
-            #     blackboard[blackboard["current_ingredient"]] = False
-
-            # else:
-            #     blackboard[blackboard["current_ingredient"]] += 1
-
-        else:
-            blackboard["retry_place"] = 0
-            check_sandwich = True
-
-            weight_delta = curr_weight - pre_weight
-            yasmin.YASMIN_LOG_INFO(f"Delta in placement weight {weight_delta}")
-            try:
-
-                placed_slices = int(np.round(weight_delta/ blackboard["stock"][blackboard['current_ingredient']]['weight_per_slice'] ))
-                placed_slices = max(placed_slices, 0)  # Check for negative numbers
-
-                if placed_slices > blackboard["picked_slices"]:
-                    yasmin.YASMIN_LOG_INFO(f"Placed {placed_slices} slices of {blackboard['current_ingredient']}")
-                    yasmin.YASMIN_LOG_INFO(
-                        f"Strange behavior, placed more slices than picked up, going to fail state")
-                    return "failed"
-            except:
-                placed_slices = 1
-                traceback.print_exc()
-
-            blackboard["placed_slices"] = placed_slices
-                
-            yasmin.YASMIN_LOG_INFO(
-                f"Placed {placed_slices} slices of {blackboard['current_ingredient']}"
-            )
-             
-            # TODO: should we update recipe in place state or pre grasp state
-
-            if blackboard["stock"][blackboard['current_ingredient']]['type'] == "bread":
-                # blackboard["bread"] -= placed_slices #Updates the recipe
-                blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] -= 1
-                print(
-                    f"Remaining {blackboard['current_ingredient']} slices: {blackboard['stock'][blackboard['current_ingredient']]['slices']}"
-                )
+                return "retry"
+        
             else:
-                # blackboard[blackboard['current_ingredient']] -= placed_slices  
-                blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] -= placed_slices # Updates the recipe
-                print(
-                    f"Remaining {blackboard['current_ingredient']} slices: {blackboard['stock'][blackboard['current_ingredient']]['slices']}"
+                blackboard["retry_place"] = 0
+                check_sandwich = False
+
+                weight_delta = curr_weight - pre_weight
+                yasmin.YASMIN_LOG_INFO(f"Delta in placement weight {weight_delta}")
+
+                # blackboard["placed_slices"] = placed_slices
+                    
+                yasmin.YASMIN_LOG_INFO(
+                    f"Placed {weight_delta}g of {blackboard['current_ingredient']}"
                 )
-    
+                
+                # TODO: should we update recipe in place state or pre grasp state
+                blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] -= 1 # Updates the recipe
+                print(
+                    f"Remaining {blackboard['current_ingredient']}: {blackboard['stock'][blackboard['current_ingredient']]['weight']}"
+                )
+
+        # check for other ingredients
+        else:
+            
+            curr_ingredient_weight_per_slice = blackboard["stock"][blackboard['current_ingredient']]['weight_per_slice'] 
+
+            if curr_weight - pre_weight < curr_ingredient_weight_per_slice * 0.2:
+                blackboard["retry_place"] += 1
+                yasmin.YASMIN_LOG_INFO("Failed to place the ingredient, retrying...")
+
+                if blackboard["retry_place"] == 3:
+                    if blackboard['stock'][blackboard['current_ingredient']]['type'] == "bread" and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 2:
+                    # if blackboard["current_ingredient"] == "bread_bottom_slice":
+                        yasmin.YASMIN_LOG_INFO(
+                            "Aborting task: Failed to place bread bottom slice"
+                        )
+                        return "failed"
+                    else:
+                        blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] = 0
+                        yasmin.YASMIN_LOG_INFO(
+                            "Moving to the next ingredient in the recipe"
+                        )
+                        return "next_ingredient"
+                        
+                return "retry"
+        
+
+            else:
+                blackboard["retry_place"] = 0
+                check_sandwich = True
+
+                weight_delta = curr_weight - pre_weight
+                yasmin.YASMIN_LOG_INFO(f"Delta in placement weight {weight_delta}")
+                try:
+
+                    placed_slices = int(np.round(weight_delta/ blackboard["stock"][blackboard['current_ingredient']]['weight_per_slice'] ))
+                    placed_slices = max(placed_slices, 0)  # Check for negative numbers
+
+                    if placed_slices > blackboard["picked_slices"]:
+                        yasmin.YASMIN_LOG_INFO(f"Placed {placed_slices} slices of {blackboard['current_ingredient']}")
+                        yasmin.YASMIN_LOG_INFO(
+                            f"Strange behavior, placed more slices than picked up, going to fail state")
+                        return "failed"
+                except:
+                    placed_slices = 1
+                    traceback.print_exc()
+
+                blackboard["placed_slices"] = placed_slices
+                    
+                yasmin.YASMIN_LOG_INFO(
+                    f"Placed {placed_slices} slices of {blackboard['current_ingredient']}"
+                )
+                
+                # TODO: should we update recipe in place state or pre grasp state
+
+                if blackboard["stock"][blackboard['current_ingredient']]['type'] == "bread":
+                    blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] -= 1
+                    print(
+                        f"Remaining {blackboard['current_ingredient']} slices: {blackboard['stock'][blackboard['current_ingredient']]['slices']}"
+                    )
+                else:
+                    blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] -= placed_slices # Updates the recipe
+                    print(
+                        f"Remaining {blackboard['current_ingredient']} slices: {blackboard['stock'][blackboard['current_ingredient']]['slices']}"
+                    )
 
         ### Sandwich Check
 
