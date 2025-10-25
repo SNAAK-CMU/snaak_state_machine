@@ -9,6 +9,11 @@ from action_msgs.msg import GoalStatus
 from snaak_vision.srv import GetXYZFromImage, CheckIngredientPlace
 from std_srvs.srv import Trigger
 from snaak_weight_read.srv import ReadWeight
+from pathlib import Path
+import yaml
+from typing import Dict,Any, List
+from dynamixel_sdk_custom_interfaces.msg import SetPosition
+
 
 class SandwichLogger():
     def __init__(self, ingredients):
@@ -70,7 +75,141 @@ class SandwichLogger():
                 writer.writerow(data)
             self.terminated = True
 
+def load_recipe_dict(yaml_path: str) -> Dict[str, Dict[str, int]]:
+    """
+    Parse YAML of form:
+    recipe:
+      - white_bread: 2
+      - peperoni: 2
+      - any_other: N
 
+    Returns: {'white_bread': {'slices_req': 2}, ...}
+    """
+    p = Path(yaml_path)
+    if not p.is_file():
+        raise FileNotFoundError(f"File not found: {yaml_path}")
+
+    with p.open("r", encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+
+    raw = data.get("recipe")
+    if raw is None:
+        raise ValueError("YAML missing top-level 'recipe' key")
+
+    recipe: Dict[str, Dict[str, int]] = {}
+
+    if isinstance(raw, list):
+        for item in raw:
+            if not isinstance(item, dict):
+                raise ValueError(f"Invalid list entry (expected mapping): {item}")
+            for name, qty in item.items():
+                recipe[name] = {"slices_req": int(qty)}
+    elif isinstance(raw, dict):
+        # (Also support mapping form)
+        for name, qty in raw.items():
+            recipe[name] = {"slices_req": int(qty)}
+    else:
+        raise ValueError("'recipe' must be a list or a mapping")
+
+    return recipe
+
+def load_stock_dict(yaml_path: str) -> Dict[str, Dict[str, Any]]:
+    """
+    Parse YAML of form:
+
+    ingredients:
+      cheddar:
+        slices: 4
+        bin: 1
+        type: cheese
+        weight_per_slice: 20.5
+      ham:
+        slices: 4
+        bin: 2
+        type: meat
+        weight_per_slice: 37
+      italian_white_bread:
+        slices: 4
+        bin: 3
+        type: bread
+        weight_per_slice: 32
+
+    Returns:
+      {
+        'cheddar': {'slices': 4, 'bin': 1, 'type': 'cheese', 'weight_per_slice': 20.5},
+        'ham': {...},
+        'italian_white_bread': {...}
+      }
+    """
+    p = Path(yaml_path)
+    if not p.is_file():
+        raise FileNotFoundError(f"File not found: {yaml_path}")
+
+    with p.open("r", encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+
+    ing = data.get("ingredients")
+    if ing is None or not isinstance(ing, dict):
+        raise ValueError("YAML missing 'ingredients' mapping")
+
+    stock: Dict[str, Dict[str, Any]] = {}
+    for name, info in ing.items():
+        if not isinstance(info, dict):
+            raise ValueError(f"Entry for '{name}' must be a mapping")
+        try:
+            slices = int(info.get("slices", 0))
+            bin_id = int(info.get("bin", 0))
+            type_ = str(info.get("type", ""))
+            wps = float(info.get("weight_per_slice", 0.0))
+        except (TypeError, ValueError) as e:
+            raise ValueError(f"Bad field types for ingredient '{name}': {e}")
+        stock[name] = {
+            "slices": slices,
+            "bin": bin_id,
+            "type": type_,
+            "weight_per_slice": wps,
+        }
+    return stock
+
+def update_stock_yaml(stock_dict: Dict[str, Dict[str, Any]], yaml_path: str) -> None:
+    """
+    Updates the stock.yaml file with the provided stock_dict.
+    The format of stock_dict should match the output of load_stock_dict:
+        {
+            'cheddar': {'slices': 4, 'bin': 1, 'type': 'cheese', 'weight_per_slice': 20.5},
+            'ham': {...},
+            ...
+        }
+    The YAML will be written in the format:
+    ingredients:
+      cheddar:
+        slices: 4
+        bin: 1
+        type: cheese
+        weight_per_slice: 20.5
+      ham:
+        ...
+    """
+    data = {"ingredients": {}}
+    for name, info in stock_dict.items():
+        # Ensure all expected keys are present
+        data["ingredients"][name] = {
+            "slices": int(info.get("slices", 0)),
+            "bin": int(info.get("bin", 0)),
+            "type": str(info.get("type", "")),
+            "weight_per_slice": float(info.get("weight_per_slice", 0.0)),
+        }
+    with open(yaml_path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(data, f, sort_keys=False)
+
+# Example usage:
+# update_stock_yaml(stock, "/home/snaak/Documents/recipe/stock.yaml")
+
+def get_ingredient(stock: Dict[str, Dict[str, Any]],  recipe_keys: List[str], ingredient_type: str) -> List[str]:
+
+    ingredient = [k for k, v in stock.items() if v.get('type') == ingredient_type and k in recipe_keys]
+    
+    return ingredient
 
 def send_goal(node, action_client: ActionClient, action_goal):
     """
@@ -107,7 +246,7 @@ def send_goal(node, action_client: ActionClient, action_goal):
         return False
 
 
-def get_point_XYZ(node, service_client, location, pickup):
+def get_point_XYZ(node, service_client, ingredient_name, location, pickup):
     """
     Retrieves the XYZ coordinates of a specified location using a vision service.
     This function sends a request to a vision service to obtain the XYZ coordinates
@@ -128,7 +267,7 @@ def get_point_XYZ(node, service_client, location, pickup):
 
     # changing this to make it easier to pass values, unify data types between vision and manipulation for bin locations
     coordRequest.location_id = int(location)
-
+    coordRequest.ingredient_name = ingredient_name
     coordRequest.timestamp = 1.0  # change this to current time for sync
 
     if pickup:
@@ -220,7 +359,17 @@ def save_image(node, service_client):
     rclpy.spin_until_future_complete(node, future)
 
     yasmin.YASMIN_LOG_INFO(f"image_saved")
-
+    
+def move_soft_gripper(node, publisher, ingrdieent_type):
+    if ingrdieent_type in ["bread", "cheese", "meat"]:
+        position = 3100  # Open position for bread
+    else:
+        position = 1030  # Closed position for other ingredients
+    msg = SetPosition()
+    msg.id = 1
+    msg.position = position
+    publisher.publish(msg)
+    yasmin.YASMIN_LOG_INFO(f"Gripper moved to position: {position} for {ingrdieent_type}")
 
 
 if __name__ == "__main__":

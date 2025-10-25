@@ -27,9 +27,6 @@ class BreadLocalizationState(State):
         super().__init__(outcomes=["succeeded", "failed"])
         self.node = node
 
-        self._traj_action_client = ActionClient(
-            self.node, ExecuteTrajectory, "snaak_manipulation/execute_trajectory"
-        )
         self._get_place_xyz_client = self.node.create_client(
             GetXYZFromImage, "snaak_vision/get_place_point"
         )
@@ -37,19 +34,13 @@ class BreadLocalizationState(State):
     def execute(self, blackboard: Blackboard) -> str:
         yasmin.YASMIN_LOG_INFO("Executing state PreGrasp")
 
-        # goal_msg = ExecuteTrajectory.Goal()
-
-        # goal_msg.desired_location = "assembly"
-        # result = send_goal(self.node, self._traj_action_client, goal_msg)
-
-
         retries = 3
         for i in range(retries):
             time.sleep(2)  # Time delay due to transformation issues
 
             retries -= 1
             pickup_point = get_point_XYZ(
-                self.node, self._get_place_xyz_client, 5, pickup=False
+                self.node, self._get_place_xyz_client,'bread', 5, pickup=False
             )
 
             if pickup_point == None:
