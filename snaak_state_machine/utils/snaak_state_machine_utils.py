@@ -12,6 +12,8 @@ from snaak_weight_read.srv import ReadWeight
 from pathlib import Path
 import yaml
 from typing import Dict,Any, List
+from dynamixel_sdk_custom_interfaces.msg import SetPosition
+
 
 class SandwichLogger():
     def __init__(self, ingredients):
@@ -357,7 +359,17 @@ def save_image(node, service_client):
     rclpy.spin_until_future_complete(node, future)
 
     yasmin.YASMIN_LOG_INFO(f"image_saved")
-
+    
+def move_soft_gripper(node, publisher, ingrdieent_type):
+    if ingrdieent_type in ["bread", "cheese", "meat"]:
+        position = 3100  # Open position for bread
+    else:
+        position = 1030  # Closed position for other ingredients
+    msg = SetPosition()
+    msg.id = 1
+    msg.position = position
+    publisher.publish(msg)
+    yasmin.YASMIN_LOG_INFO(f"Gripper moved to position: {position} for {ingrdieent_type}")
 
 
 if __name__ == "__main__":

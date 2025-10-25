@@ -126,11 +126,19 @@ def load_stock_dict(yaml_path: str) -> Dict[str, Dict[str, Any]]:
         }
     return stock
 
+def get_ingredient(stock: Dict[str, Dict[str, Any]],  recipe_keys: List[str], ingredient_type: str) -> List[str]:
+
+    ingredient = [k for k, v in stock.items() if v.get('type') == ingredient_type and k in recipe_keys]
+    
+    return ingredient
 
 # ---------- dataclasses ----------
 
 
 if __name__ == "__main__":
-    all_breads = [k for k, v in stock.items() if v.get('type') == 'bread' and k in list(recipe.keys())]
+    stock = load_stock_dict(stock_file_path)
+    recipe = load_recipe_dict(RECIPE_YAML_PATH)
+    print(stock)
+    all_breads = get_ingredient(stock, list(recipe.keys()), 'meat')
     # print(recipe[all_breads[0]]['slices_req'])
     print(all_breads)

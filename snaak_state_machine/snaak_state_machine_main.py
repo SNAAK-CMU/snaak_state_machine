@@ -31,6 +31,7 @@ from snaak_state_machine.utils.pickup_state import PickupState
 from snaak_state_machine.utils.pre_place_state import PrePlaceState
 from snaak_state_machine.utils.place_state import PlaceState
 from snaak_state_machine.utils.fail_state import FailState
+from dynamixel_sdk_custom_interfaces.msg import SetPosition
 
 
 def main():
@@ -57,7 +58,7 @@ def main():
         "Restock",
         Restock(node),
         transitions={
-            "completed": "Home",
+            "completed": "ReadStock",
         },
     )
 
@@ -65,9 +66,9 @@ def main():
         "Recipe",
         ReadRecipe(node),
         transitions={
-            # "loop": "Recipe",
+            "loop": "Recipe",
             "start_recipe": "PreGrasp",
-            # "restock": "Restock",
+            "restock": "Restock",
         },
     )
 
@@ -95,6 +96,7 @@ def main():
         transitions={
             "succeeded": "Pickup",
             "finished": "Home",
+            "next_ingredient": "PreGrasp",
             "failed": "Fail",
         },
     )

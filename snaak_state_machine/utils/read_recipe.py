@@ -17,7 +17,7 @@ from std_srvs.srv import Trigger
 from std_msgs.msg import Bool, String
 from snaak_vision.srv import GetXYZFromImage, CheckIngredientPlace
 from snaak_state_machine.utils.snaak_state_machine_utils import (
-        SandwichLogger, send_goal, get_point_XYZ, get_weight,
+        SandwichLogger, get_ingredient, send_goal, get_point_XYZ, get_weight,
         get_sandwich_check, disable_arm, disable_vacuum, reset_sandwich_checker,
         save_image, enable_arm, load_recipe_dict,
         )
@@ -31,9 +31,8 @@ class ReadRecipe(State):
             Trigger, "/snaak_vision/reset_sandwich_checker"
         )
         
-        #TODO: change this back to false later to start the recipe through the ui
-        self.start_recipe = True
-        self.start_restock = True
+        self.start_recipe = False
+        self.start_restock = False
         self.start_recipe_subscriber = self.node.create_subscription(Bool, 
                                                                      '/snaak_ui/start_recipe', 
                                                                      self.start_recipe_callback, 
@@ -81,16 +80,21 @@ class ReadRecipe(State):
             if "bread_center_coordinate" not in blackboard:
                         blackboard["bread_center_coordinate"] = None
 
-            print('test') 
+
             reset_sandwich_checker(self.node, self.reset_sandwich_checker_client)
-            print('test')
             yasmin.YASMIN_LOG_INFO("Resetting sandwich checker")
 
             next_state = "start_recipe"
 
-            #TODO: change this back to false later to start the recipe through the ui
-            # self.start_recipe = False
-            # self.start_restock = False
+            self.start_recipe = False
+            self.start_restock = False
+
+        elif self.start_restock:
+            yasmin.YASMIN_LOG_INFO("Restocking Ingredients")
+            next_state = "restock"
+
+            self.start_recipe = False
+            self.start_restock = False
 
         return next_state
 

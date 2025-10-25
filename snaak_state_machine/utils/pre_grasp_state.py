@@ -18,36 +18,49 @@ from snaak_vision.srv import GetXYZFromImage, CheckIngredientPlace
 from snaak_state_machine.utils.snaak_state_machine_utils import (
         SandwichLogger, send_goal, get_point_XYZ, get_weight,
         get_sandwich_check, disable_arm, disable_vacuum, reset_sandwich_checker,
-        save_image, enable_arm, get_ingredient, update_stock_yaml
+        save_image, enable_arm, get_ingredient, update_stock_yaml, move_soft_gripper
         )
 import traceback
+from dynamixel_sdk_custom_interfaces.msg import SetPosition
 
 
 class PreGraspState(State):
     def __init__(self, node) -> None:
-        super().__init__(outcomes=["succeeded", "finished", "failed"])
+        super().__init__(outcomes=["succeeded", "finished", "next_ingredient", "failed"])
         self.node = node
 
         self._traj_action_client = ActionClient(
             self.node, ExecuteTrajectory, "snaak_manipulation/execute_trajectory"
+        )
+        
+        self.set_position_publisher = node.create_publisher(
+            SetPosition, "/set_position", 10
         )
 
     def execute(self, blackboard: Blackboard) -> str:
         bread_key = get_ingredient(blackboard["stock"], blackboard["recipe_keys"], "bread")
         cheese_key = get_ingredient(blackboard["stock"], blackboard["recipe_keys"], "cheese")
         meat_key = get_ingredient(blackboard["stock"], blackboard["recipe_keys"], "meat")
-        print(blackboard["recipe_keys"])
         yasmin.YASMIN_LOG_INFO("Executing state PreGrasp")
         goal_msg = ExecuteTrajectory.Goal()
+        
         
         if  blackboard['recipe'][bread_key[0]]['slices_req'] == 2:
 
             blackboard['current_ingredient_type'] = blackboard['stock'][bread_key[0]]['type']
             blackboard['current_ingredient'] = bread_key[0]
 
-            # I think this needs to be here and in pick up incase it fails and in place incase the fails
-            blackboard['recipe'][bread_key[0]]['slices_req'] -= 1
-            print(blackboard['recipe'][bread_key[0]]['slices_req'])
+            # Ani: I think this needs to be here and in pick up incase it fails and in place incase the fails
+            # Rodrigo: I commented it out otherwise retrying will never work for bread bottom slice
+            # blackboard['recipe'][bread_key[0]]['slices_req'] -= 1
+            
+            #Check if the bread is available in stock
+            if blackboard['stock'][blackboard['current_ingredient']]['slices'] <= 0:
+                yasmin.YASMIN_LOG_INFO(f"{bread_key[0]} is out of stock")
+                return "next_ingredient"
+            
+            
+            move_soft_gripper(self.node, self.set_position_publisher, blackboard['current_ingredient_type']) 
             goal_msg.desired_location = "bin" + str(blackboard['stock'][bread_key[0]]['bin']) 
             yasmin.YASMIN_LOG_INFO("bread bottom slice position")
 
@@ -59,50 +72,67 @@ class PreGraspState(State):
                 yasmin.YASMIN_LOG_INFO(f"Goal failed with status {True}")
                 return "failed"
 
-        # TODO: Add a for loop to iterate through multiple cheese type if there are any in the recipe
-        if blackboard["recipe"][cheese_key[0]]['slices_req'] > 0:
+        for current_cheese in cheese_key:
+            if blackboard["recipe"][current_cheese]['slices_req'] <= 0:
+                continue
             
-            blackboard["recipe"][cheese_key[0]]['slices_req'] -= 1
-            blackboard['current_ingredient_type'] = blackboard['stock'][cheese_key[0]]['type']
-            blackboard['current_ingredient'] = blackboard['recipe'][cheese_key[0]]
+            if blackboard["recipe"][current_cheese]['slices_req'] > 0:
+                
+                # blackboard["recipe"][cheese_key[0]]['slices_req'] -= 1
+                blackboard['current_ingredient_type'] = blackboard['stock'][current_cheese]['type']
+                blackboard['current_ingredient'] = current_cheese
 
-            goal_msg.desired_location = "bin" + str(blackboard['stock'][cheese_key[0]]['bin'])
-            yasmin.YASMIN_LOG_INFO("cheese position")
-            result = send_goal(self.node, self._traj_action_client, goal_msg)
-            if result == True:
-                yasmin.YASMIN_LOG_INFO("Goal succeeded")
-                return "succeeded"
-            else:
-                yasmin.YASMIN_LOG_INFO(f"Goal failed with status {True}")
-                return "failed"
-        
-        # TODO: Add a for loop to iterate through multiple meat type if there are any in the recipe 
-        if blackboard["recipe"][meat_key[0]]['slices_req'] > 0:
-            blackboard["recipe"][meat_key[0]]['slices_req'] -= 1
-            blackboard['current_ingredient'] = blackboard['recipe'][meat_key[0]]
-            blackboard['current_ingredient_type'] = blackboard['stock'][meat_key[0]]['type']
+                #Check if the cheese is available in stock
+                if blackboard['stock'][blackboard['current_ingredient']]['slices'] <= 0:
+                    yasmin.YASMIN_LOG_INFO(f"{current_cheese} is out of stock")
+                    return "next_ingredient"
+                
+                move_soft_gripper(self.node, self.set_position_publisher, blackboard['current_ingredient_type']) 
+                goal_msg.desired_location = "bin" + str(blackboard['stock'][current_cheese]['bin'])
+                yasmin.YASMIN_LOG_INFO("cheese position")
+                result = send_goal(self.node, self._traj_action_client, goal_msg)
+                if result == True:
+                    yasmin.YASMIN_LOG_INFO("Goal succeeded")
+                    return "succeeded"
+                else:
+                    yasmin.YASMIN_LOG_INFO(f"Goal failed with status {True}")
+                    return "failed"
+                
+        for current_meat in meat_key:
 
-            goal_msg.desired_location = "bin" + str(blackboard['stock'][meat_key[0]]['bin'])
-            yasmin.YASMIN_LOG_INFO("ham position")
-            result = send_goal(self.node, self._traj_action_client, goal_msg)
+            if blackboard["recipe"][current_meat]['slices_req'] <= 0:
+                continue
 
-            if result == True:
-                yasmin.YASMIN_LOG_INFO("Goal succeeded")
-                return "succeeded"
-            else:
-                yasmin.YASMIN_LOG_INFO(f"Goal failed with status {True}")
-                return "failed"
+            if blackboard["recipe"][current_meat]['slices_req'] > 0:
+                blackboard['current_ingredient'] = current_meat
+                blackboard['current_ingredient_type'] = blackboard['stock'][current_meat]['type']
+                
+                #Check if the meat is available in stock
+                if blackboard['stock'][blackboard['current_ingredient']]['slices'] <= 0:
+                    yasmin.YASMIN_LOG_INFO(f"{current_meat} is out of stock")
+                    return "next_ingredient"
+
+                move_soft_gripper(self.node, self.set_position_publisher, blackboard['current_ingredient_type']) 
+                goal_msg.desired_location = "bin" + str(blackboard['stock'][current_meat]['bin'])
+                yasmin.YASMIN_LOG_INFO("ham position")
+                result = send_goal(self.node, self._traj_action_client, goal_msg)
+
+                if result == True:
+                    yasmin.YASMIN_LOG_INFO("Goal succeeded")
+                    return "succeeded"
+                else:
+                    yasmin.YASMIN_LOG_INFO(f"Goal failed with status {True}")
+                    return "failed"
 
 
+        if (blackboard["recipe"][bread_key[0]]['slices_req'] == 1):
+            # (and blackboard["recipe"][cheese_key[0]]['slices_req'] <= 0
+            # and blackboard["recipe"][meat_key[0]]['slices_req'] <= 0):
 
-        if (blackboard["recipe"][bread_key[0]]['slices_req'] == 1 
-            and blackboard["recipe"][cheese_key[0]]['slices_req'] <= 0
-            and blackboard["recipe"][meat_key[0]]['slices_req'] <= 0):
-
-            blackboard["recipe"][bread_key[0]]['slices_req'] -= 1
             blackboard['current_ingredient_type'] = blackboard['stock'][bread_key[0]]['type']
-            blackboard['current_ingredient'] = blackboard['recipe'][bread_key[0]]
+            blackboard['current_ingredient'] = bread_key[0]
 
+            move_soft_gripper(self.node, self.set_position_publisher, blackboard['current_ingredient_type']) 
             goal_msg.desired_location = "bin" + str(blackboard['stock'][bread_key[0]]['bin'])
             yasmin.YASMIN_LOG_INFO("bread top slice position")
             result = send_goal(self.node, self._traj_action_client, goal_msg)

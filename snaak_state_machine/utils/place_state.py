@@ -45,7 +45,7 @@ class PlaceState(State):
         goal_msg = Place.Goal()
         pre_weight = get_weight(self.node, self._get_weight_assembly)
 
-        if blackboard['stock'][blackboard['current_ingredient']]['type'] == "bread" and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 1:
+        if blackboard['stock'][blackboard['current_ingredient']]['type'] == "bread" and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 2:
             goal_msg.x = blackboard["tray_center_coordinate"]["x"]
             goal_msg.y = blackboard["tray_center_coordinate"]["y"]
             goal_msg.z = (
@@ -89,7 +89,7 @@ class PlaceState(State):
             yasmin.YASMIN_LOG_INFO("Failed to place the ingredient, retrying...")
 
             if blackboard["retry_place"] == 3:
-                if blackboard['stock'][blackboard['current_ingredient']]['type'] == "bread" and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 1:
+                if blackboard['stock'][blackboard['current_ingredient']]['type'] == "bread" and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 2:
                 # if blackboard["current_ingredient"] == "bread_bottom_slice":
                     yasmin.YASMIN_LOG_INFO(
                         "Aborting task: Failed to place bread bottom slice"
@@ -99,8 +99,16 @@ class PlaceState(State):
                     # TODO: can make this zero if problems arise with placement
                     # blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] -= 1
                     # blackboard[blackboard["current_ingredient"]] = 0
+                    #TODO if we already tried 3 times to place and failed, we should move to next ingredient
+                    # for this we need to set the recipe req slices to 0
+                    blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] = 0
+                    yasmin.YASMIN_LOG_INFO(
+                        "Moving to the next ingredient in the recipe"
+                    )
                     return "next_ingredient"
-
+                    
+            return "retry"
+    
             # if (
             #     blackboard["current_ingredient"] == "bread_top_slice"
             #     or blackboard["current_ingredient"] == "bread_bottom_slice"
@@ -136,80 +144,85 @@ class PlaceState(State):
                 f"Placed {placed_slices} slices of {blackboard['current_ingredient']}"
             )
              
-            # TODO: should we update recipe in place state or pre grasp state 
-            
-            if blackboard["stock"][blackboard['current_ingredient']]['stock'] == "bread": 
+            # TODO: should we update recipe in place state or pre grasp state
+
+            if blackboard["stock"][blackboard['current_ingredient']]['type'] == "bread":
                 # blackboard["bread"] -= placed_slices #Updates the recipe
+                blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] -= 1
                 print(
-                    f"Remaining {blackboard['current_ingredient']} slices: {blackboard["stock"][blackboard['current_ingredient']]['stock']}"
+                    f"Remaining {blackboard['current_ingredient']} slices: {blackboard['stock'][blackboard['current_ingredient']]['slices']}"
                 )
             else:
                 # blackboard[blackboard['current_ingredient']] -= placed_slices  
                 blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] -= placed_slices # Updates the recipe
                 print(
-                    f"Remaining {blackboard['current_ingredient']} slices: {blackboard["stock"][blackboard['current_ingredient']]['stock']}"
+                    f"Remaining {blackboard['current_ingredient']} slices: {blackboard['stock'][blackboard['current_ingredient']]['slices']}"
                 )
     
 
         ### Sandwich Check
+
+        if blackboard['stock'][blackboard['current_ingredient']]['type'] == "bread" and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 1 and check_sandwich:
+            ingredient_name = "bread_bottom"
+
+            sandwich_check_response, sandwich_check_error = get_sandwich_check(
+                self.node, self._check_sandwitch_client, ingredient_name, placed_slices
+            )
+            if sandwich_check_response == True:
+                # blackboard["logger"].update(
+                #     blackboard["current_ingredient"], placed_slices)
+                yasmin.YASMIN_LOG_INFO(f"bread bottom slice placed correctly")
+            else:
+                # blackboard["logger"].update(blackboard["current_ingredient"], 0)
+                yasmin.YASMIN_LOG_INFO(f"bread not placed correctly")
+
+        elif blackboard['stock'][blackboard['current_ingredient']]['type'] == "bread" and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 0 and check_sandwich:
+            ingredient_name = "bread_top"
+            sandwich_check_response, sandwich_check_error = get_sandwich_check(
+                self.node, self._check_sandwitch_client, ingredient_name, placed_slices
+            )
+            if sandwich_check_response == True:
+                # blackboard["logger"].update(
+                #     blackboard["current_ingredient"], placed_slices
+                # )
+                yasmin.YASMIN_LOG_INFO(f"bread placed correctly")
+            else:
+                # blackboard["logger"].update(blackboard["current_ingredient"], 0)
+                yasmin.YASMIN_LOG_INFO(f"bread not placed correctly")
         
-        # if blackboard["current_ingredient"] == "bread_bottom_slice" and check_sandwich:
-        #     ingredient_name = "bread_bottom"
 
-        #     sandwich_check_response, sandwich_check_error = get_sandwich_check(
-        #         self.node, self._check_sandwitch_client, ingredient_name, placed_slices
-        #     )
-        #     if sandwich_check_response == True:
-        #         blackboard["logger"].update(
-        #             blackboard["current_ingredient"], placed_slices)
-        #         yasmin.YASMIN_LOG_INFO(f"bread bottom slice placed correctly")
-        #     else:
-        #         blackboard["logger"].update(blackboard["current_ingredient"], 0)
-        #         yasmin.YASMIN_LOG_INFO(f"bread not placed correctly")
+        # TODO: call other ingredients other than bread, tell the vision subsystem to handle cheese, meat ingredient types etc.
+        elif check_sandwich:
+            ingredient_name = blackboard["stock"][blackboard["current_ingredient"]]["type"]
+            sandwich_check_response, sandwich_check_error = get_sandwich_check(
+                self.node, self._check_sandwitch_client, ingredient_name, placed_slices
+            )
 
-        # elif blackboard["current_ingredient"] == "bread_top_slice" and check_sandwich:
-        #     ingredient_name = "bread_top"
-        #     sandwich_check_response, sandwich_check_error = get_sandwich_check(
-        #         self.node, self._check_sandwitch_client, ingredient_name, placed_slices
-        #     )
-        #     if sandwich_check_response == True:
-        #         blackboard["logger"].update(
-        #             blackboard["current_ingredient"], placed_slices
-        #         )
-        #         yasmin.YASMIN_LOG_INFO(f"bread placed correctly")
-        #     else:
-        #         blackboard["logger"].update(blackboard["current_ingredient"], 0)
-        #         yasmin.YASMIN_LOG_INFO(f"bread not placed correctly")
+            if sandwich_check_response == True:
+                # blackboard["logger"].update(
+                #     blackboard["current_ingredient"], placed_slices
+                # )
+                yasmin.YASMIN_LOG_INFO(f"{ingredient_name} placed correctly")
+            else:
+                # blackboard["logger"].update(blackboard["current_ingredient"], 0)
+                yasmin.YASMIN_LOG_INFO(f"{ingredient_name} not placed correctly")
 
-        # elif check_sandwich:
-        #     ingredient_name = blackboard["current_ingredient"]
-        #     sandwich_check_response, sandwich_check_error = get_sandwich_check(
-        #         self.node, self._check_sandwitch_client, ingredient_name, placed_slices
-        #     )
-
-        #     if sandwich_check_response == True:
-        #         blackboard["logger"].update(
-        #             blackboard["current_ingredient"], placed_slices
-        #         )
-        #         yasmin.YASMIN_LOG_INFO(f"{ingredient_name} placed correctly")
-        #     else:
-        #         blackboard["logger"].update(blackboard["current_ingredient"], 0)
-        #         yasmin.YASMIN_LOG_INFO(f"{ingredient_name} not placed correctly")
-
-        # else:
-        #     yasmin.YASMIN_LOG_INFO("No sandwich check needed")
+        else:
+            # TODO change this once sandwich check has been implemented for other ingredients
+            ingredient_name = 'not_bread'
+            yasmin.YASMIN_LOG_INFO("No sandwich check needed")
 
 
-        # if result == True:
-        #     yasmin.YASMIN_LOG_INFO("Goal succeeded")
+        if result == True:
+            yasmin.YASMIN_LOG_INFO("Goal succeeded")
 
-        #     if blackboard["current_ingredient"] == "bread_bottom_slice":
-        #         return "bread_localize"
-        #     else:
-        #         return "succeeded"
+            if ingredient_name == "bread_bottom":
+                return "bread_localize"
+            else:
+                return "succeeded"
 
-        # else:
-        #     yasmin.YASMIN_LOG_INFO(f"Goal failed with status {True}")
-        #     return "failed"
+        else:
+            yasmin.YASMIN_LOG_INFO(f"Goal failed with status {True}")
+            return "failed"
 
 

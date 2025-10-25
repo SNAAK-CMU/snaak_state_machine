@@ -40,7 +40,7 @@ class BreadLocalizationState(State):
 
             retries -= 1
             pickup_point = get_point_XYZ(
-                self.node, self._get_place_xyz_client, 5, pickup=False
+                self.node, self._get_place_xyz_client,'bread', 5, pickup=False
             )
 
             if pickup_point == None:

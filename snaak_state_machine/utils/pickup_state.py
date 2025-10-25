@@ -34,8 +34,11 @@ class PickupState(State):
         self._get_pickup_xyz_client = self.node.create_client(
             GetXYZFromImage, "snaak_vision/get_pickup_point"
         )
-        self._get_weight_bins = self.node.create_client(
-            ReadWeight, "/snaak_weight_read/snaak_scale_bins/read_weight"
+        self._get_weight_left_bins = self.node.create_client(
+            ReadWeight, "/snaak_weight_read/snaak_scale_bins_left/read_weight"
+        )
+        self._get_weight_right_bins = self.node.create_client(
+            ReadWeight, "/snaak_weight_read/snaak_scale_bins_right/read_weight"
         )
         self._reset_arm_client = ActionClient(
             self.node, ReturnHome, "snaak_manipulation/return_home"
@@ -55,8 +58,13 @@ class PickupState(State):
         pickup_tries = 3
 
         while retry_pickup <= pickup_tries:  # change this to try more pick ups
-
-            pre_weight = get_weight(self.node, self._get_weight_bins)
+            if int(blackboard['stock'][blackboard['current_ingredient']]['bin']) in [1,2,3]:
+                pre_weight = get_weight(self.node, self._get_weight_right_bins)
+            elif int(blackboard['stock'][blackboard['current_ingredient']]['bin']) in [4,5,6]:
+                pre_weight = get_weight(self.node, self._get_weight_left_bins)
+            else:
+                yasmin.YASMIN_LOG_INFO("Invalid bin number for weight reading")
+                return "failed"
 
             pickup_point = get_point_XYZ(
                 self.node, self._get_pickup_xyz_client, blackboard['stock'][blackboard['current_ingredient']]['type'],
@@ -96,6 +104,7 @@ class PickupState(State):
                     # else:
                     #     blackboard[f"{blackboard['current_ingredient']}"] -= 1  # Updates the recipe
                     # blackboard['stock'][blackboard['current_ingredient']]['slices_req'] -= 1
+                    blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] = 0
                     return "next_ingredient"
                 else:
                     yasmin.YASMIN_LOG_INFO(f"Goal failed with status {True}")
@@ -116,7 +125,14 @@ class PickupState(State):
 
             time.sleep(1) # Wait for weight scale
 
-            curr_weight = get_weight(self.node, self._get_weight_bins)
+            if int(blackboard['stock'][blackboard['current_ingredient']]['bin']) in [1,2,3]:
+                curr_weight = get_weight(self.node, self._get_weight_right_bins)
+            elif int(blackboard['stock'][blackboard['current_ingredient']]['bin']) in [4,5,6]:
+                curr_weight = get_weight(self.node, self._get_weight_left_bins)
+            else:
+                yasmin.YASMIN_LOG_INFO("Invalid bin number for weight reading")
+                return "failed"
+
             yasmin.YASMIN_LOG_INFO(
                 f"Delta in placement weight {pre_weight-curr_weight}"
             )
@@ -139,7 +155,7 @@ class PickupState(State):
                     # picked_slices = int(np.round(weight_delta/ blackboard[f"{blackboard['current_ingredient']}_weight_per_slice"]))
                     picked_slices = int(np.round(weight_delta/ blackboard['stock'][blackboard['current_ingredient']]['weight_per_slice']))
                     picked_slices = max(picked_slices, 0) # Check for negative numbers
-                    print('##################')  
+ 
 
                 except:
                     picked_slices = 1
