@@ -13,6 +13,7 @@ from pathlib import Path
 import yaml
 from typing import Dict,Any, List
 from dynamixel_sdk_custom_interfaces.msg import SetPosition
+from snaak_shredded_grasp.srv import GetGraspPose
 
 
 class SandwichLogger():
@@ -302,6 +303,51 @@ def get_point_XYZ(node, service_client, ingredient_name, location, pickup):
 
     yasmin.YASMIN_LOG_INFO(
         f"Result from Vision Node: {result.x}, {result.y}, {result.z}"
+    )
+
+    return result
+
+def get_shredded_grasp_pose(node, service_client, bin_id, ingredient_name, desired_weight):
+    """
+    Retrieves the grasp pose for shredded ingredients using a dedicated service.
+    This function sends a request to a service to obtain the grasp pose for shredded
+    ingredients based on the specified bin ID, ingredient name, and desired weight.
+    Args:
+        node (rclpy.node.Node): The ROS 2 node instance used for spinning and logging.
+        service_client (rclpy.client.Client): The service client used to call the grasp pose service.
+        bin_id (int): The ID of the bin containing the shredded ingredient.
+        ingredient_name (str): The name of the shredded ingredient.
+        desired_weight (float): The desired weight of the shredded ingredient to be grasped.
+    Returns:
+        result (GetGraspPose.Response or None): The response from the grasp pose service containing
+        the XYZ coordinates. Returns `None` if the coordinates are invalid or if the depth
+        information is unavailable.
+    """
+
+    grasp_pose_request = GetGraspPose.Request()
+    grasp_pose_request.location_id = bin_id
+    grasp_pose_request.ingredient_name = ingredient_name
+    grasp_pose_request.desired_pickup_weight = desired_weight
+
+    timeout = 5.0  # seconds
+    try:
+        future = service_client.call_async(grasp_pose_request)
+        rclpy.spin_until_future_complete(node, future, timeout_sec=timeout)
+        result = future.result()  # This will now either contain the response or raise an exception
+    except TimeoutError:
+        print(f"Service call timed out after {timeout} seconds.")
+        result = None
+
+    if result.x == -1 or result.y == -1 or result.z == None:
+        yasmin.YASMIN_LOG_INFO("Unable to Get Grasp Pose from Shredded Grasp Node")
+        return None
+
+    elif result.z == -1:
+        yasmin.YASMIN_LOG_INFO("Unable to get Depth")
+        return None
+
+    yasmin.YASMIN_LOG_INFO(
+        f"Result from Shredded Grasp Node: {result.x}, {result.y}, {result.z}"
     )
 
     return result

@@ -40,6 +40,13 @@ def generate_launch_description():
         executable='read_write_node',
         name='dynamixel_node'
     )
+
+    shredded_grasp_node = Node(
+        package='snaak_shredded_grasp',
+        executable='snaak_shredded_grasp_node.py',
+        name='snaak_shredded_grasp_node',
+        output='screen'
+    )
     # state_machine_node = launch_ros.actions.Node(
     #         package='snaak_state_machine',
     #         executable='snaak_state_machine_main',
@@ -49,6 +56,7 @@ def generate_launch_description():
         vision_launch,
         manipulation_launch,
         weight_launch,
-        dynamixel_node
+        dynamixel_node,
+        shredded_grasp_node
         #state_machine_node
     ])

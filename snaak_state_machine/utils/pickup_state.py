@@ -18,10 +18,11 @@ from snaak_vision.srv import GetXYZFromImage, CheckIngredientPlace
 from snaak_state_machine.utils.snaak_state_machine_utils import (
         SandwichLogger, send_goal, get_point_XYZ, get_weight,
         get_sandwich_check, disable_arm, disable_vacuum, reset_sandwich_checker,
-        save_image, enable_arm
+        save_image, enable_arm, get_shredded_grasp_pose
         )
 import traceback
 from types import SimpleNamespace
+from snaak_shredded_grasp.srv import GetGraspPose
 
 
 class PickupState(State):
@@ -50,6 +51,9 @@ class PickupState(State):
         self._save_image_client = self.node.create_client(
             Trigger, "/snaak_vision/save_detection_image"
         )
+        self._get_shredded_grasp_pose_client = self.node.create_client(
+            GetGraspPose, "/snaak_shredded_grasp_node/get_grasp_pose"
+        )
 
     def execute(self, blackboard: Blackboard):
         yasmin.YASMIN_LOG_INFO("Executing state PickUp")
@@ -69,7 +73,18 @@ class PickupState(State):
 
             if blackboard['current_ingredient_type'] == "shredded":
                 # create a default pickup point at origin (0,0,0)
-                pickup_point = SimpleNamespace(x=0.0, y=0.0, z=-0.03)
+                bin_id = int(blackboard['stock'][blackboard['current_ingredient']]['bin'])
+                ingredient_name = blackboard['current_ingredient']
+
+                desired_weight = blackboard['recipe'][blackboard['current_ingredient']]['slices_req'] * blackboard['stock'][blackboard['current_ingredient']]['weight_per_serving']
+                desired_weight = float(desired_weight)
+                print(f"desired weight {desired_weight}")
+
+                while not self._get_shredded_grasp_pose_client.wait_for_service(timeout_sec=1.0):
+                    print("Shredded Grasp Service not available, waiting again...")
+
+                pickup_point = get_shredded_grasp_pose(self.node, self._get_shredded_grasp_pose_client, bin_id, ingredient_name, desired_weight)
+                # pickup_point = SimpleNamespace(x=0.0, y=0.0, z=-0.03)
             else:
                 pickup_point = get_point_XYZ(
                     self.node, self._get_pickup_xyz_client, blackboard['stock'][blackboard['current_ingredient']]['type'],
