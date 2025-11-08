@@ -97,6 +97,9 @@ class PlaceState(State):
 
             if curr_weight - pre_weight < weight_per_serving-5: # 5 grams off tolerance
                 blackboard["retry_place"] += 1
+
+                weight_delta = curr_weight - pre_weight
+                yasmin.YASMIN_LOG_INFO(f"Delta in placement weight {weight_delta}")
                 yasmin.YASMIN_LOG_INFO("Failed to place the ingredient, retrying...")
 
                 if blackboard["retry_place"] == 3:
@@ -134,7 +137,10 @@ class PlaceState(State):
 
             if curr_weight - pre_weight < curr_ingredient_weight_per_slice * 0.2:
                 blackboard["retry_place"] += 1
+                weight_delta = curr_weight - pre_weight
+                yasmin.YASMIN_LOG_INFO(f"Delta in placement weight {weight_delta}")
                 yasmin.YASMIN_LOG_INFO("Failed to place the ingredient, retrying...")
+
 
                 if blackboard["retry_place"] == 3:
                     if blackboard['stock'][blackboard['current_ingredient']]['type'] == "bread" and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 2:

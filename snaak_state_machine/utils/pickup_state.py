@@ -1,3 +1,4 @@
+import re
 import time
 import rclpy
 import yaml
@@ -97,13 +98,15 @@ class PickupState(State):
                 save_image(self.node, self._save_image_client)
                 retry_pickup += 1
 
-            if (retry_pickup == pickup_tries and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 1): #bottom slice
+            print(f"Current ingredient: {blackboard['current_ingredient']}, Slices required: {blackboard['recipe'][blackboard['current_ingredient']]['slices_req']}")
+            
+            if (retry_pickup == pickup_tries and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 2 and "bread" in blackboard["recipe"][blackboard['current_ingredient']]): #bottom slice
                 yasmin.YASMIN_LOG_INFO("Aborting task: Failed to identify bread bottom slice")
                 return "failed"
 
-            if (retry_pickup == pickup_tries and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 0): #top slice
-                yasmin.YASMIN_LOG_INFO("Aborting task: Failed to identify bread top slice")
-                return "failed"
+            # if (retry_pickup == pickup_tries and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 1): #top slice
+            #     yasmin.YASMIN_LOG_INFO("Aborting task: Failed to identify bread top slice")
+            #     return "failed"
 
             if retry_pickup == pickup_tries:
                 yasmin.YASMIN_LOG_INFO(
@@ -143,6 +146,7 @@ class PickupState(State):
                 goal_msg.ingredient_type = 2
             else:
                 goal_msg.ingredient_type = 1
+            goal_msg.ingredient_name = blackboard['current_ingredient']
             goal_msg.bin_id = int(blackboard["stock"][blackboard['current_ingredient']]['bin'])
             result = send_goal(self.node, self._pickup_action_client, goal_msg)
 
@@ -167,7 +171,9 @@ class PickupState(State):
                 if pre_weight - curr_weight <= 5:   # If it is bellow 5 grams (as per requirement) then we need to retry
 
                     # disabled vacuum
-                    disable_vacuum(self.node, self._disable_vacuum_client)
+                    if retry_pickup == pickup_tries:
+                        disable_vacuum(self.node, self._disable_vacuum_client)
+                        
                     yasmin.YASMIN_LOG_INFO("Vacuum Disabled")
                     save_image(self.node, self._save_image_client)
                     yasmin.YASMIN_LOG_INFO("Failed to pick up the ingredient, retrying...")
@@ -217,12 +223,14 @@ class PickupState(State):
 
             if result == True:
                 yasmin.YASMIN_LOG_INFO("Goal succeeded")
-                if "bread" in blackboard["current_ingredient"]:
+                if "bread" in blackboard["current_ingredient"] and blackboard['recipe'][blackboard['current_ingredient']]['slices_req'] == 2:
                     blackboard["ingredient_thickness"] += 0.01
+                elif "bread" in blackboard["current_ingredient"] and blackboard['recipe'][blackboard['current_ingredient']]['slices_req'] == 1:
+                    blackboard["ingredient_thickness"] -= 0.01
                 elif blackboard['current_ingredient_type'] == "shredded":
-                    blackboard["ingredient_thickness"] += 0.02   #TODO adjust thickness per weight picked
+                    blackboard["ingredient_thickness"] += 0.01   #TODO adjust thickness per weight picked
                 else:
-                    blackboard["ingredient_thickness"] += 0.007 * picked_slices
+                    blackboard["ingredient_thickness"] += 0.004 * picked_slices
                 return "succeeded"
             else:
                 yasmin.YASMIN_LOG_INFO(f"Goal failed with status {True}")

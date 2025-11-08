@@ -338,7 +338,7 @@ def get_shredded_grasp_pose(node, service_client, bin_id, ingredient_name, desir
         print(f"Service call timed out after {timeout} seconds.")
         result = None
 
-    if result.x == -1 or result.y == -1 or result.z == None:
+    if result is None or result.x == -1 or result.y == -1 or result.z == None:
         yasmin.YASMIN_LOG_INFO("Unable to Get Grasp Pose from Shredded Grasp Node")
         return None
 
@@ -426,6 +426,7 @@ def move_soft_gripper(node, publisher, ingrdieent_type):
     msg = SetPosition()
     msg.id = 1
     msg.position = position
+    msg.max_speed = 60
     publisher.publish(msg)
     yasmin.YASMIN_LOG_INFO(f"Gripper moved to position: {position} for {ingrdieent_type}")
 
