@@ -19,7 +19,7 @@ from snaak_vision.srv import GetXYZFromImage, CheckIngredientPlace
 from snaak_state_machine.utils.snaak_state_machine_utils import (
         SandwichLogger, send_goal, get_point_XYZ, get_weight,
         get_sandwich_check, disable_arm, disable_vacuum, reset_sandwich_checker,
-        save_image, enable_arm
+        save_image, enable_arm, log_shredded_placement
         )
 import traceback
 
@@ -91,6 +91,7 @@ class PlaceState(State):
         #     curr_ingredient_weight_per_slice = blackboard[f"{blackboard['current_ingredient']}_weight_per_slice"]
 
         # Check weight for shredded separately
+        # Adding weight check for shredded ingredients here
         if blackboard['stock'][blackboard['current_ingredient']]['type'] == "shredded":
 
             weight_per_serving = blackboard["stock"][blackboard['current_ingredient']]['weight_per_serving'] 
@@ -108,7 +109,9 @@ class PlaceState(State):
                     yasmin.YASMIN_LOG_INFO(
                         "Moving to the next ingredient in the recipe"
                     )
+                    log_shredded_placement(ingredient_name=blackboard['current_ingredient'], passed=False)
                     return "next_ingredient"
+
                 return "retry"
         
             else:
@@ -126,6 +129,7 @@ class PlaceState(State):
                 
                 # TODO: should we update recipe in place state or pre grasp state
                 blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] -= 1 # Updates the recipe
+                log_shredded_placement(ingredient_name=blackboard['current_ingredient'], passed=True)
                 print(
                     f"Remaining {blackboard['current_ingredient']}: {blackboard['stock'][blackboard['current_ingredient']]['weight']}"
                 )
@@ -170,11 +174,11 @@ class PlaceState(State):
                     placed_slices = int(np.round(weight_delta/ blackboard["stock"][blackboard['current_ingredient']]['weight_per_slice'] ))
                     placed_slices = max(placed_slices, 0)  # Check for negative numbers
 
-                    if placed_slices > blackboard["picked_slices"]:
-                        yasmin.YASMIN_LOG_INFO(f"Placed {placed_slices} slices of {blackboard['current_ingredient']}")
-                        yasmin.YASMIN_LOG_INFO(
-                            f"Strange behavior, placed more slices than picked up, going to fail state")
-                        return "failed"
+                    # if placed_slices > blackboard["picked_slices"]:
+                    #     yasmin.YASMIN_LOG_INFO(f"Placed {placed_slices} slices of {blackboard['current_ingredient']}")
+                    #     yasmin.YASMIN_LOG_INFO(
+                    #         f"Strange behavior, placed more slices than picked up, going to fail state")
+                    #     return "failed"
                 except:
                     placed_slices = 1
                     traceback.print_exc()

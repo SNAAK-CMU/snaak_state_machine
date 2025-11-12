@@ -12,14 +12,14 @@ from yasmin_ros import set_ros_loggers
 from yasmin_viewer import YasminViewerPub
 from rclpy.action import ActionClient
 from action_msgs.msg import GoalStatus
-from snaak_manipulation.action import ReturnHome, ExecuteTrajectory, Pickup, Place
+from snaak_manipulation.action import ReturnHome, ExecuteTrajectory, Pickup, Place, PlaceInBin
 from snaak_weight_read.srv import ReadWeight
 from std_srvs.srv import Trigger
 from snaak_vision.srv import GetXYZFromImage, CheckIngredientPlace
 from snaak_state_machine.utils.snaak_state_machine_utils import (
         SandwichLogger, send_goal, get_point_XYZ, get_weight,
         get_sandwich_check, disable_arm, disable_vacuum, reset_sandwich_checker,
-        save_image, enable_arm, get_shredded_grasp_pose
+        save_image, enable_arm, get_shredded_grasp_pose, log_shredded_placement
         )
 import traceback
 from types import SimpleNamespace
@@ -45,6 +45,9 @@ class PickupState(State):
         )
         self._reset_arm_client = ActionClient(
             self.node, ReturnHome, "snaak_manipulation/return_home"
+        )
+        self._place_in_bin = ActionClient(
+            self.node, PlaceInBin, "snaak_manipulation/place_in_bin"
         )
         self._disable_vacuum_client = self.node.create_client(
             Trigger, "/snaak_pneumatic/disable_vacuum"
@@ -128,6 +131,8 @@ class PickupState(State):
                     #     blackboard[f"{blackboard['current_ingredient']}"] -= 1  # Updates the recipe
                     # blackboard['stock'][blackboard['current_ingredient']]['slices_req'] -= 1
                     blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] = 0
+                    if blackboard['current_ingredient_type'] == "shredded":
+                        log_shredded_placement(blackboard['current_ingredient'], passed=False)
                     return "next_ingredient"
                 else:
                     yasmin.YASMIN_LOG_INFO(f"Goal failed with status {True}")
@@ -161,7 +166,7 @@ class PickupState(State):
                 return "failed"
 
             yasmin.YASMIN_LOG_INFO(
-                f"Delta in placement weight {pre_weight-curr_weight}"
+                f"Delta in pick up weight {pre_weight-curr_weight}"
             )
 
             # -------------------------------------------------------------------------------------
@@ -169,14 +174,27 @@ class PickupState(State):
             # -------------------------------------------------------------------------------------
             if blackboard['current_ingredient_type'] == "shredded":
                 if pre_weight - curr_weight <= 5:   # If it is bellow 5 grams (as per requirement) then we need to retry
+                    weight_delta = pre_weight - curr_weight
+                    yasmin.YASMIN_LOG_INFO(f"Shredded pickup attempt {retry_pickup+1} of {pickup_tries}")
 
-                    # disabled vacuum
-                    if retry_pickup == pickup_tries:
+                    if retry_pickup == pickup_tries-1:
+                        #TODO go to center of the bin
+
+                        yasmin.YASMIN_LOG_INFO("Moving to the center of the bin for placing failed pickup")
+
+                        goal_msg = PlaceInBin.Goal()
+                        goal_msg.bin_id = int(blackboard['stock'][blackboard['current_ingredient']]['bin'])
+                        result = send_goal(self.node, self._place_in_bin, goal_msg)
+
+                        yasmin.YASMIN_LOG_INFO("Disabling vacuum")
                         disable_vacuum(self.node, self._disable_vacuum_client)
-                        
-                    yasmin.YASMIN_LOG_INFO("Vacuum Disabled")
+
+
+                    # disabled vacuum                  
+                    # yasmin.YASMIN_LOG_INFO("Vacuum Disabled")
                     save_image(self.node, self._save_image_client)
                     yasmin.YASMIN_LOG_INFO("Failed to pick up the ingredient, retrying...")
+
                     #TODO Here we can get set the next serving to be a full serving as per recipe or we can subtract the recipe weight from the picked up weight to only pick up the remaining
                     retry_pickup += 1
                     continue
@@ -190,6 +208,7 @@ class PickupState(State):
                         f"Picked weight {weight_delta}g of {blackboard['current_ingredient']}"
                     )
                     blackboard['stock'][blackboard['current_ingredient']]['weight'] -= weight_delta
+                    
 
             else:
                 if pre_weight - curr_weight <= 4.0:
@@ -209,7 +228,7 @@ class PickupState(State):
                     try:
                         # picked_slices = int(np.round(weight_delta/ blackboard[f"{blackboard['current_ingredient']}_weight_per_slice"]))
                         picked_slices = int(np.round(weight_delta/ blackboard['stock'][blackboard['current_ingredient']]['weight_per_slice']))
-                        picked_slices = max(picked_slices, 0) # Check for negative numbers
+                        picked_slices = max(picked_slices, 1) # Check for negative numbers
                     except:
                         picked_slices = 1
                         traceback.print_exc()
@@ -219,7 +238,6 @@ class PickupState(State):
                         f"Picked {picked_slices} slices of {blackboard['current_ingredient']}"
                     )
                     blackboard['stock'][blackboard['current_ingredient']]['slices'] -= picked_slices
-
 
             if result == True:
                 yasmin.YASMIN_LOG_INFO("Goal succeeded")

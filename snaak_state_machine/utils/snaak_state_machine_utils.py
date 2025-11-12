@@ -14,7 +14,62 @@ import yaml
 from typing import Dict,Any, List
 from dynamixel_sdk_custom_interfaces.msg import SetPosition
 from snaak_shredded_grasp.srv import GetGraspPose
+from typing import List, Dict
 
+SHREDDED_LOG_PATH = "/home/snaak/Documents/recipe/shredded_log/shredded_ingredient_log.yaml"
+
+# def log_shredded_placement(ingredient_name: str, passed: bool) -> None:
+#     """
+#     Write shredded ingredient tolerance result (overwrites file each time).
+    
+#     Args:
+#         ingredient_name: Name of ingredient
+#         passed: True if within tolerance, False otherwise
+#     """
+#     os.makedirs(os.path.dirname(SHREDDED_LOG_PATH), exist_ok=True)
+    
+#     data = {
+#         "ingredient_name": ingredient_name,
+#         "status": "PASS" if passed else "FAIL"
+#     }
+    
+#     with open(SHREDDED_LOG_PATH, 'w') as f:
+#         yaml.dump(data, f, default_flow_style=False)
+
+
+
+def log_shredded_placement(ingredient_name: str, passed: bool) -> None:
+    """
+    Append shredded ingredient result to the YAML log.
+    
+    Args:
+        ingredient_name: Name of ingredient
+        passed: True if within tolerance, False otherwise
+    """
+    os.makedirs(os.path.dirname(SHREDDED_LOG_PATH), exist_ok=True)
+    
+    # Read existing data
+    if os.path.exists(SHREDDED_LOG_PATH):
+        with open(SHREDDED_LOG_PATH, 'r') as f:
+            data = yaml.safe_load(f) or {"shredded_ingredients": []}
+    else:
+        data = {"shredded_ingredients": []}
+    
+    # Append new entry
+    data["shredded_ingredients"].append({
+        "ingredient_name": ingredient_name,
+        "status": "PASS" if passed else "FAIL"
+    })
+    
+    # Write back
+    with open(SHREDDED_LOG_PATH, 'w') as f:
+        yaml.dump(data, f, default_flow_style=False)
+
+def reset_shredded_log() -> None:
+    """Call at start of each assembly to clear previous run."""
+    os.makedirs(os.path.dirname(SHREDDED_LOG_PATH), exist_ok=True)
+    with open(SHREDDED_LOG_PATH, 'w') as f:
+        yaml.dump({"shredded_ingredients": []}, f)
 
 class SandwichLogger():
     def __init__(self, ingredients):

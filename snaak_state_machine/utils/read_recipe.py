@@ -19,7 +19,7 @@ from snaak_vision.srv import GetXYZFromImage, CheckIngredientPlace
 from snaak_state_machine.utils.snaak_state_machine_utils import (
         SandwichLogger, get_ingredient, send_goal, get_point_XYZ, get_weight,
         get_sandwich_check, disable_arm, disable_vacuum, reset_sandwich_checker,
-        save_image, enable_arm, load_recipe_dict,
+        save_image, enable_arm, load_recipe_dict, reset_shredded_log,
         )
 import traceback
 
@@ -52,6 +52,7 @@ class ReadRecipe(State):
     def execute(self, blackboard: Blackboard):
         yasmin.YASMIN_LOG_INFO("Reading Recipe")
         time.sleep(1)
+        reset_shredded_log()
 
         next_state = ""
         recipe_file_path = "/home/snaak/Documents/recipe/recipe.yaml"
