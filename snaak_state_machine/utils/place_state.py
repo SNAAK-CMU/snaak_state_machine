@@ -44,6 +44,7 @@ class PlaceState(State):
         yasmin.YASMIN_LOG_INFO("Executing state Place")
         goal_msg = Place.Goal()
         pre_weight = get_weight(self.node, self._get_weight_assembly)
+        weight_delta_sum = 0
 
         if blackboard['stock'][blackboard['current_ingredient']]['type'] == "bread" and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 2:
             goal_msg.x = blackboard["tray_center_coordinate"]["x"]
@@ -95,13 +96,16 @@ class PlaceState(State):
         if blackboard['stock'][blackboard['current_ingredient']]['type'] == "shredded":
 
             weight_per_serving = blackboard["stock"][blackboard['current_ingredient']]['weight_per_serving'] 
+            weight_delta = curr_weight - pre_weight
+            weight_delta_sum += weight_delta
 
-            if curr_weight - pre_weight < weight_per_serving-5: # 5 grams off tolerance
+            if weight_delta_sum < weight_per_serving-5: # 5 grams off tolerance
                 blackboard["retry_place"] += 1
 
-                weight_delta = curr_weight - pre_weight
                 yasmin.YASMIN_LOG_INFO(f"Delta in placement weight {weight_delta}")
                 yasmin.YASMIN_LOG_INFO("Failed to place the ingredient, retrying...")
+                
+                
 
                 if blackboard["retry_place"] == 3:
 
@@ -109,7 +113,8 @@ class PlaceState(State):
                     yasmin.YASMIN_LOG_INFO(
                         "Moving to the next ingredient in the recipe"
                     )
-                    log_shredded_placement(ingredient_name=blackboard['current_ingredient'], passed=False)
+                    if weight_delta_sum < weight_per_serving -5 or weight_delta_sum > weight_per_serving +5:
+                        log_shredded_placement(ingredient_name=blackboard['current_ingredient'], passed=False)
                     return "next_ingredient"
 
                 return "retry"

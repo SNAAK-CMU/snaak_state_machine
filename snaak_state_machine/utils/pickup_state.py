@@ -103,7 +103,7 @@ class PickupState(State):
 
             print(f"Current ingredient: {blackboard['current_ingredient']}, Slices required: {blackboard['recipe'][blackboard['current_ingredient']]['slices_req']}")
             
-            if (retry_pickup == pickup_tries and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 2 and "bread" in blackboard["recipe"][blackboard['current_ingredient']]): #bottom slice
+            if (retry_pickup == pickup_tries and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 2 and "bread" in blackboard['current_ingredient']): #bottom slice
                 yasmin.YASMIN_LOG_INFO("Aborting task: Failed to identify bread bottom slice")
                 return "failed"
 
