@@ -95,11 +95,12 @@ class PickupState(State):
                     int(blackboard['stock'][blackboard['current_ingredient']]['bin']), pickup=True
                 )
 
-            if pickup_point == None:
-                yasmin.YASMIN_LOG_INFO("retrying pickup")
-                time.sleep(0.5)
-                save_image(self.node, self._save_image_client)
-                retry_pickup += 1
+            # if pickup_point == None:
+            #     yasmin.YASMIN_LOG_INFO("retrying pickup")
+            #     time.sleep(1.0)
+            #     save_image(self.node, self._save_image_client)
+            #     retry_pickup += 1
+            #     continue
 
             print(f"Current ingredient: {blackboard['current_ingredient']}, Slices required: {blackboard['recipe'][blackboard['current_ingredient']]['slices_req']}")
             
@@ -139,6 +140,10 @@ class PickupState(State):
                     return "failed"
 
             if pickup_point == None:
+                yasmin.YASMIN_LOG_INFO("retrying pickup")
+                # time.sleep(1.0)
+                save_image(self.node, self._save_image_client)
+                retry_pickup += 1
                 time.sleep(1.0) # Time sleep betweeen pickups
                 continue
             
