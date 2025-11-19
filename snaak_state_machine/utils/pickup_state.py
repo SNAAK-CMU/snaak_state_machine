@@ -95,22 +95,11 @@ class PickupState(State):
                     int(blackboard['stock'][blackboard['current_ingredient']]['bin']), pickup=True
                 )
 
-            # if pickup_point == None:
-            #     yasmin.YASMIN_LOG_INFO("retrying pickup")
-            #     time.sleep(1.0)
-            #     save_image(self.node, self._save_image_client)
-            #     retry_pickup += 1
-            #     continue
-
             print(f"Current ingredient: {blackboard['current_ingredient']}, Slices required: {blackboard['recipe'][blackboard['current_ingredient']]['slices_req']}")
             
             if (retry_pickup == pickup_tries and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 2 and "bread" in blackboard['current_ingredient']): #bottom slice
                 yasmin.YASMIN_LOG_INFO("Aborting task: Failed to identify bread bottom slice")
                 return "failed"
-
-            # if (retry_pickup == pickup_tries and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 1): #top slice
-            #     yasmin.YASMIN_LOG_INFO("Aborting task: Failed to identify bread top slice")
-            #     return "failed"
 
             if retry_pickup == pickup_tries:
                 yasmin.YASMIN_LOG_INFO(
@@ -123,14 +112,6 @@ class PickupState(State):
                 # Home
                 if result == True:
                     yasmin.YASMIN_LOG_INFO("Goal succeeded")
-                    # TODO this logic needs to be fixed and tested properly 
-                    # if blackboard["current_ingredient_type"] == "bread" and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 1 :
-                    #     blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] += 1
-                    # elif blackboard["current_ingredient_type"] == "bread" and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 0 :
-                    #     blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] += 1
-                    # else:
-                    #     blackboard[f"{blackboard['current_ingredient']}"] -= 1  # Updates the recipe
-                    # blackboard['stock'][blackboard['current_ingredient']]['slices_req'] -= 1
                     blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] = 0
                     if blackboard['current_ingredient_type'] == "shredded":
                         log_shredded_placement(blackboard['current_ingredient'], passed=False)
@@ -141,7 +122,6 @@ class PickupState(State):
 
             if pickup_point == None:
                 yasmin.YASMIN_LOG_INFO("retrying pickup")
-                # time.sleep(1.0)
                 save_image(self.node, self._save_image_client)
                 retry_pickup += 1
                 time.sleep(1.0) # Time sleep betweeen pickups
@@ -151,7 +131,7 @@ class PickupState(State):
             goal_msg.x = pickup_point.x
             goal_msg.y = pickup_point.y
             goal_msg.z = pickup_point.z
-            # for pickup of sliced ingredients
+
             if blackboard['current_ingredient_type'] == "shredded":
                 goal_msg.ingredient_type = 2
             else:
@@ -194,13 +174,9 @@ class PickupState(State):
                         yasmin.YASMIN_LOG_INFO("Disabling vacuum")
                         disable_vacuum(self.node, self._disable_vacuum_client)
 
-
-                    # disabled vacuum                  
-                    # yasmin.YASMIN_LOG_INFO("Vacuum Disabled")
                     save_image(self.node, self._save_image_client)
                     yasmin.YASMIN_LOG_INFO("Failed to pick up the ingredient, retrying...")
 
-                    #TODO Here we can get set the next serving to be a full serving as per recipe or we can subtract the recipe weight from the picked up weight to only pick up the remaining
                     retry_pickup += 1
                     continue
 
@@ -217,8 +193,6 @@ class PickupState(State):
 
             else:
                 if pre_weight - curr_weight <= 4.0:
-
-                    # disabled vacuum
                     disable_vacuum(self.node, self._disable_vacuum_client)
                     yasmin.YASMIN_LOG_INFO("Vacuum Disabled")
                     save_image(self.node, self._save_image_client)
@@ -231,7 +205,6 @@ class PickupState(State):
                     retry_pickup = 0
                     weight_delta = pre_weight - curr_weight
                     try:
-                        # picked_slices = int(np.round(weight_delta/ blackboard[f"{blackboard['current_ingredient']}_weight_per_slice"]))
                         picked_slices = int(np.round(weight_delta/ blackboard['stock'][blackboard['current_ingredient']]['weight_per_slice']))
                         picked_slices = max(picked_slices, 1) # Check for negative numbers
                     except:

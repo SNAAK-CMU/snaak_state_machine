@@ -86,13 +86,6 @@ class PlaceState(State):
         placed_slices = 1
         check_sandwich = False
 
-        # if "bread" in blackboard["current_ingredient"]:
-        #     curr_ingredient_weight_per_slice = blackboard["bread_weight_per_slice"]
-        # else:
-        #     curr_ingredient_weight_per_slice = blackboard[f"{blackboard['current_ingredient']}_weight_per_slice"]
-
-        # Check weight for shredded separately
-        # Adding weight check for shredded ingredients here
         if blackboard['stock'][blackboard['current_ingredient']]['type'] == "shredded":
 
             weight_per_serving = blackboard["stock"][blackboard['current_ingredient']]['weight_per_serving'] 
@@ -125,8 +118,6 @@ class PlaceState(State):
 
                 weight_delta = curr_weight - pre_weight
                 yasmin.YASMIN_LOG_INFO(f"Delta in placement weight {weight_delta}")
-
-                # blackboard["placed_slices"] = placed_slices
                     
                 yasmin.YASMIN_LOG_INFO(
                     f"Placed {weight_delta}g of {blackboard['current_ingredient']}"
@@ -175,15 +166,8 @@ class PlaceState(State):
                 weight_delta = curr_weight - pre_weight
                 yasmin.YASMIN_LOG_INFO(f"Delta in placement weight {weight_delta}")
                 try:
-
                     placed_slices = int(np.round(weight_delta/ blackboard["stock"][blackboard['current_ingredient']]['weight_per_slice'] ))
                     placed_slices = max(placed_slices, 0)  # Check for negative numbers
-
-                    # if placed_slices > blackboard["picked_slices"]:
-                    #     yasmin.YASMIN_LOG_INFO(f"Placed {placed_slices} slices of {blackboard['current_ingredient']}")
-                    #     yasmin.YASMIN_LOG_INFO(
-                    #         f"Strange behavior, placed more slices than picked up, going to fail state")
-                    #     return "failed"
                 except:
                     placed_slices = 1
                     traceback.print_exc()
@@ -208,7 +192,6 @@ class PlaceState(State):
                     )
 
         ### Sandwich Check
-
         if blackboard['stock'][blackboard['current_ingredient']]['type'] == "bread" and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 1 and check_sandwich:
             ingredient_name = "bread_bottom"
 
@@ -216,11 +199,8 @@ class PlaceState(State):
                 self.node, self._check_sandwitch_client, ingredient_name, placed_slices
             )
             if sandwich_check_response == True:
-                # blackboard["logger"].update(
-                #     blackboard["current_ingredient"], placed_slices)
                 yasmin.YASMIN_LOG_INFO(f"bread bottom slice placed correctly")
             else:
-                # blackboard["logger"].update(blackboard["current_ingredient"], 0)
                 yasmin.YASMIN_LOG_INFO(f"bread not placed correctly")
 
         elif blackboard['stock'][blackboard['current_ingredient']]['type'] == "bread" and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 0 and check_sandwich:
@@ -229,12 +209,8 @@ class PlaceState(State):
                 self.node, self._check_sandwitch_client, ingredient_name, placed_slices
             )
             if sandwich_check_response == True:
-                # blackboard["logger"].update(
-                #     blackboard["current_ingredient"], placed_slices
-                # )
                 yasmin.YASMIN_LOG_INFO(f"bread placed correctly")
             else:
-                # blackboard["logger"].update(blackboard["current_ingredient"], 0)
                 yasmin.YASMIN_LOG_INFO(f"bread not placed correctly")
         
 
@@ -246,12 +222,8 @@ class PlaceState(State):
             )
 
             if sandwich_check_response == True:
-                # blackboard["logger"].update(
-                #     blackboard["current_ingredient"], placed_slices
-                # )
                 yasmin.YASMIN_LOG_INFO(f"{ingredient_name} placed correctly")
             else:
-                # blackboard["logger"].update(blackboard["current_ingredient"], 0)
                 yasmin.YASMIN_LOG_INFO(f"{ingredient_name} not placed correctly")
 
         else:

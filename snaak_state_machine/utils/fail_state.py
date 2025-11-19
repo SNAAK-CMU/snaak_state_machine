@@ -31,36 +31,12 @@ class FailState(State):
         yasmin.YASMIN_LOG_INFO("Fail State")
 
         file_path = "/home/snaak/Documents/recipe/stock.yaml"
-        # blackboard["ingredient_list"] = ["cheese", "ham", "bread"]
-        # stock_data = {}
 
-        # if blackboard["failed"] == False:
-        #     for i in blackboard["ingredient_list"]:
-        #         stock_data[i] = {
-        #             "slices": blackboard[f"{i}_slices"],
-        #             "weight": blackboard[f"{i}_weight"],
-        #             "weight_per_slice": blackboard[f"{i}_weight_per_slice"],
-        #         }
-
-        #     if os.path.exists(file_path):
-        #         with open(file_path, "r") as file:
-        #             stock = yaml.safe_load(file)  # Load existing data if file exists
-        #     else:
-        #         stock = (
-        #             {}
-        #         )  # Initialize as an empty dictionary if the file doesn't exist
-
-        #     # Append the new data to the stock
-        #     stock["ingredients"] = stock_data
-
-        #     # Write the updated stock to the file
-        #     with open(file_path, "w") as file:
-        #         yaml.dump(stock, file, default_flow_style=False)
         update_stock_yaml(blackboard['stock'],file_path)
         yasmin.YASMIN_LOG_INFO("Recipe data saved to stock.yaml")
 
         blackboard["failed"] = True
-        # blackboard["logger"].fail()
+        
         # Simulate operator input for testing purposes
         input = "ok"  # Replace this with actual input handling logic if needed
         time.sleep(1)
