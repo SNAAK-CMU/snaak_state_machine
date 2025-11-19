@@ -52,7 +52,6 @@ class ReadRecipe(State):
     def execute(self, blackboard: Blackboard):
         yasmin.YASMIN_LOG_INFO("Reading Recipe")
         time.sleep(1)
-        reset_shredded_log()
 
         next_state = ""
         recipe_file_path = "/home/snaak/Documents/recipe/recipe.yaml"
@@ -89,6 +88,7 @@ class ReadRecipe(State):
 
             self.start_recipe = False
             self.start_restock = False
+            reset_shredded_log()
 
         elif self.start_restock:
             yasmin.YASMIN_LOG_INFO("Restocking Ingredients")
@@ -96,6 +96,7 @@ class ReadRecipe(State):
 
             self.start_recipe = False
             self.start_restock = False
+            reset_shredded_log()
 
         return next_state
 

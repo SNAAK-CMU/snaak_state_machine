@@ -136,6 +136,7 @@ class PickupState(State):
                 goal_msg.ingredient_type = 2
             else:
                 goal_msg.ingredient_type = 1
+            
             goal_msg.ingredient_name = blackboard['current_ingredient']
             goal_msg.bin_id = int(blackboard["stock"][blackboard['current_ingredient']]['bin'])
             result = send_goal(self.node, self._pickup_action_client, goal_msg)
@@ -158,11 +159,16 @@ class PickupState(State):
             # --------------------- Check weight for shredded else check for sliced ---------------
             # -------------------------------------------------------------------------------------
             if blackboard['current_ingredient_type'] == "shredded":
-                if pre_weight - curr_weight <= 5:   # If it is bellow 5 grams (as per requirement) then we need to retry
+                weight_delta = pre_weight - curr_weight
+                if (weight_delta <blackboard['stock'][blackboard['current_ingredient']]['weight_per_serving'] -5 \
+                    or weight_delta > blackboard['stock'][blackboard['current_ingredient']]['weight_per_serving'] +5) \
+                    and retry_pickup <= pickup_tries -1:
+                # if pre_weight - curr_weight <= 5:   # If it is bellow 5 grams (as per requirement) then we need to retry
                     weight_delta = pre_weight - curr_weight
                     yasmin.YASMIN_LOG_INFO(f"Shredded pickup attempt {retry_pickup+1} of {pickup_tries}")
 
-                    if retry_pickup == pickup_tries-1:
+                    if retry_pickup == pickup_tries-1 \
+                        and weight_delta < blackboard['stock'][blackboard['current_ingredient']]['weight_per_serving'] -5:
                         #TODO go to center of the bin
 
                         yasmin.YASMIN_LOG_INFO("Moving to the center of the bin for placing failed pickup")
@@ -173,10 +179,9 @@ class PickupState(State):
 
                         yasmin.YASMIN_LOG_INFO("Disabling vacuum")
                         disable_vacuum(self.node, self._disable_vacuum_client)
-
+                    # result = True
                     save_image(self.node, self._save_image_client)
                     yasmin.YASMIN_LOG_INFO("Failed to pick up the ingredient, retrying...")
-
                     retry_pickup += 1
                     continue
 
