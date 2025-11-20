@@ -65,6 +65,7 @@ class PickupState(State):
         retry_pickup = 0
         time.sleep(2)  # Time delay due to transformation issues
         pickup_tries = 3
+        is_retry = False
 
         while retry_pickup <= pickup_tries:  # change this to try more pick ups
             if int(blackboard['stock'][blackboard['current_ingredient']]['bin']) in [1,2,3]:
@@ -87,7 +88,7 @@ class PickupState(State):
                 while not self._get_shredded_grasp_pose_client.wait_for_service(timeout_sec=1.0):
                     print("Shredded Grasp Service not available, waiting again...")
 
-                pickup_point = get_shredded_grasp_pose(self.node, self._get_shredded_grasp_pose_client, bin_id, ingredient_name, desired_weight)
+                pickup_point = get_shredded_grasp_pose(self.node, self._get_shredded_grasp_pose_client, bin_id, ingredient_name, desired_weight, is_retry)
                 # pickup_point = SimpleNamespace(x=0.0, y=0.0, z=-0.03)
             else:
                 pickup_point = get_point_XYZ(
@@ -173,7 +174,6 @@ class PickupState(State):
                 if (is_underweight or (is_overweight and not is_last_attempt)) and retry_pickup <= pickup_tries-1:
                 # if pre_weight - curr_weight <= 5:   # If it is below 5 grams (as per requirement) then we need to retry
                     yasmin.YASMIN_LOG_INFO(f"Shredded pickup attempt {retry_pickup+1} of {pickup_tries}")
-
                     if is_last_attempt and is_underweight:
                         #TODO go to center of the bin
 
@@ -189,6 +189,7 @@ class PickupState(State):
                     save_image(self.node, self._save_image_client)
                     yasmin.YASMIN_LOG_INFO("Failed to pick up the ingredient, retrying...")
                     retry_pickup += 1
+                    is_retry = True
                     continue
 
                 else:
