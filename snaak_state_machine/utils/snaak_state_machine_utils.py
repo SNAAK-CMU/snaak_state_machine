@@ -18,27 +18,8 @@ from typing import List, Dict
 
 SHREDDED_LOG_PATH = "/home/snaak/Documents/recipe/shredded_log/shredded_ingredient_log.yaml"
 
-# def log_shredded_placement(ingredient_name: str, passed: bool) -> None:
-#     """
-#     Write shredded ingredient tolerance result (overwrites file each time).
-    
-#     Args:
-#         ingredient_name: Name of ingredient
-#         passed: True if within tolerance, False otherwise
-#     """
-#     os.makedirs(os.path.dirname(SHREDDED_LOG_PATH), exist_ok=True)
-    
-#     data = {
-#         "ingredient_name": ingredient_name,
-#         "status": "PASS" if passed else "FAIL"
-#     }
-    
-#     with open(SHREDDED_LOG_PATH, 'w') as f:
-#         yaml.dump(data, f, default_flow_style=False)
 
-
-
-def log_shredded_placement(ingredient_name: str, passed: bool) -> None:
+def log_shredded_placement(ingredient_name: str, weight: float, passed: bool) -> None:
     """
     Append shredded ingredient result to the YAML log.
     
@@ -58,6 +39,7 @@ def log_shredded_placement(ingredient_name: str, passed: bool) -> None:
     # Append new entry
     data["shredded_ingredients"].append({
         "ingredient_name": ingredient_name,
+        "weight": weight,
         "status": "PASS" if passed else "FAIL"
     })
     
@@ -270,9 +252,6 @@ def update_stock_yaml(stock_dict: Dict[str, Dict[str, Any]], yaml_path: str) -> 
     with open(yaml_path, "w", encoding="utf-8") as f:
         yaml.safe_dump(data, f, sort_keys=False)
 
-# Example usage:
-# update_stock_yaml(stock, "/home/snaak/Documents/recipe/stock.yaml")
-
 def get_ingredient(stock: Dict[str, Dict[str, Any]],  recipe_keys: List[str], ingredient_type: str) -> List[str]:
 
     ingredient = [k for k, v in stock.items() if v.get('type') == ingredient_type and k in recipe_keys]
@@ -313,7 +292,6 @@ def send_goal(node, action_client: ActionClient, action_goal):
     else:
         return False
 
-
 def get_point_XYZ(node, service_client, ingredient_name, location, pickup):
     """
     Retrieves the XYZ coordinates of a specified location using a vision service.
@@ -337,16 +315,19 @@ def get_point_XYZ(node, service_client, ingredient_name, location, pickup):
     coordRequest.location_id = int(location)
     coordRequest.ingredient_name = ingredient_name
     coordRequest.timestamp = 1.0  # change this to current time for sync
+    try:
+        if pickup:
+            future = service_client.call_async(coordRequest)
+            rclpy.spin_until_future_complete(node, future, timeout_sec=5.0)
+            result = future.result()
 
-    if pickup:
-        future = service_client.call_async(coordRequest)
-        rclpy.spin_until_future_complete(node, future)
-        result = future.result()
-
-    else:
-        future = service_client.call_async(coordRequest)
-        rclpy.spin_until_future_complete(node, future)
-        result = future.result()
+        else:
+            future = service_client.call_async(coordRequest)
+            rclpy.spin_until_future_complete(node, future, timeout_sec=5.0)
+            result = future.result()
+    except TimeoutError:
+        print("Get XYZ service call timed out after 5.0 seconds.")
+        return None
 
     if result.x == -1 or result.y == -1 or result.z == None:
         yasmin.YASMIN_LOG_INFO("Unable to Get XYZ from Vision Node")
@@ -414,13 +395,7 @@ def get_weight(node, service_client):
     rclpy.spin_until_future_complete(node, future)
     result = future.result()
 
-    # TODO: add error checking for the result
-    # define error from weight scale
-
-    yasmin.YASMIN_LOG_INFO(f"weight: {result}")
-
     return result.weight.data
-
 
 def get_sandwich_check(node, service_client, ingredient_name, ingredient_count):
 
@@ -433,14 +408,12 @@ def get_sandwich_check(node, service_client, ingredient_name, ingredient_count):
 
     return result.is_placed, result.is_error
 
-
 def disable_arm(node, service_client):
     disable_req = Trigger.Request()
     future = service_client.call_async(disable_req)
     rclpy.spin_until_future_complete(node, future)
 
     yasmin.YASMIN_LOG_INFO(f"arm disabled")
-
 
 def enable_arm(node, service_client):
     enable_req = Trigger.Request()
@@ -449,7 +422,6 @@ def enable_arm(node, service_client):
 
     yasmin.YASMIN_LOG_INFO(f"arm enabled")
 
-
 def disable_vacuum(node, service_client):
     disable_req = Trigger.Request()
     future = service_client.call_async(disable_req)
@@ -457,14 +429,12 @@ def disable_vacuum(node, service_client):
 
     yasmin.YASMIN_LOG_INFO(f"vacuum disabled")
 
-
 def reset_sandwich_checker(node, service_client):
     reset_sandwich = Trigger.Request()
     future = service_client.call_async(reset_sandwich)
     rclpy.spin_until_future_complete(node, future)
 
     yasmin.YASMIN_LOG_INFO(f"reset sandwich checker")
-
 
 def save_image(node, service_client):
     disable_req = Trigger.Request()
@@ -493,10 +463,8 @@ if __name__ == "__main__":
     log.update("ham", 1)
     log.update("bread_top_slice", 1)
     log.update("bread_bottom_slice", 1)
-
-
-
     log.end()
+
     input()
     log = SandwichLogger(ingred)
     log.fail()

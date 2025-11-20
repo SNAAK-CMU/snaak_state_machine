@@ -107,7 +107,7 @@ class PlaceState(State):
                         "Moving to the next ingredient in the recipe"
                     )
                     if weight_delta_sum < weight_per_serving -5 or weight_delta_sum > weight_per_serving +5:
-                        log_shredded_placement(ingredient_name=blackboard['current_ingredient'], passed=False)
+                        log_shredded_placement(ingredient_name=blackboard['current_ingredient'], weight=weight_delta_sum, passed=False)
                     return "next_ingredient"
 
                 return "retry"
@@ -125,7 +125,7 @@ class PlaceState(State):
                 
                 # TODO: should we update recipe in place state or pre grasp state
                 blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] -= 1 # Updates the recipe
-                log_shredded_placement(ingredient_name=blackboard['current_ingredient'], passed=True)
+                log_shredded_placement(ingredient_name=blackboard['current_ingredient'],weight = weight_delta, passed=True)
                 print(
                     f"Remaining {blackboard['current_ingredient']}: {blackboard['stock'][blackboard['current_ingredient']]['weight']}"
                 )

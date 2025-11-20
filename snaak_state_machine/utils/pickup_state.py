@@ -114,7 +114,7 @@ class PickupState(State):
                     yasmin.YASMIN_LOG_INFO("Goal succeeded")
                     blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] = 0
                     if blackboard['current_ingredient_type'] == "shredded":
-                        log_shredded_placement(blackboard['current_ingredient'], passed=False)
+                        log_shredded_placement(blackboard['current_ingredient'],weight = pre_weight - curr_weight, passed=False)
                     return "next_ingredient"
                 else:
                     yasmin.YASMIN_LOG_INFO(f"Goal failed with status {True}")
@@ -160,15 +160,21 @@ class PickupState(State):
             # -------------------------------------------------------------------------------------
             if blackboard['current_ingredient_type'] == "shredded":
                 weight_delta = pre_weight - curr_weight
-                if (weight_delta <blackboard['stock'][blackboard['current_ingredient']]['weight_per_serving'] -5 \
-                    or weight_delta > blackboard['stock'][blackboard['current_ingredient']]['weight_per_serving'] +5) \
-                    and retry_pickup <= pickup_tries -1:
-                # if pre_weight - curr_weight <= 5:   # If it is bellow 5 grams (as per requirement) then we need to retry
-                    weight_delta = pre_weight - curr_weight
+                target_weight = blackboard['stock'][blackboard['current_ingredient']]['weight_per_serving']
+                
+                is_underweight = weight_delta < target_weight - 5
+                is_overweight = weight_delta > target_weight + 5
+                is_last_attempt = retry_pickup == pickup_tries - 1
+
+                # Retry if:
+                # 1. It is underweight (always retry/fail)
+                # 2. It is overweight AND it is NOT the last attempt (try to get a better weight)
+                # If it is overweight AND it IS the last attempt, we skip this block and go to 'else' (Success)
+                if (is_underweight or (is_overweight and not is_last_attempt)) and retry_pickup <= pickup_tries-1:
+                # if pre_weight - curr_weight <= 5:   # If it is below 5 grams (as per requirement) then we need to retry
                     yasmin.YASMIN_LOG_INFO(f"Shredded pickup attempt {retry_pickup+1} of {pickup_tries}")
 
-                    if retry_pickup == pickup_tries-1 \
-                        and weight_delta < blackboard['stock'][blackboard['current_ingredient']]['weight_per_serving'] -5:
+                    if is_last_attempt and is_underweight:
                         #TODO go to center of the bin
 
                         yasmin.YASMIN_LOG_INFO("Moving to the center of the bin for placing failed pickup")
@@ -187,13 +193,14 @@ class PickupState(State):
 
                 else:
                     retry_pickup = 0
-                    weight_delta = pre_weight - curr_weight
+                    # weight_delta is already calculated above
                     blackboard["picked_weight"] = weight_delta
 
                     yasmin.YASMIN_LOG_INFO(
                         f"Picked weight {weight_delta}g of {blackboard['current_ingredient']}"
                     )
                     blackboard['stock'][blackboard['current_ingredient']]['weight'] -= weight_delta
+                    
                     
 
             else:
