@@ -89,6 +89,8 @@ class ReadRecipe(State):
             self.start_recipe = False
             self.start_restock = False
             reset_shredded_log()
+            blackboard["logger"] = SandwichLogger(blackboard['recipe'])
+
 
         elif self.start_restock:
             yasmin.YASMIN_LOG_INFO("Restocking Ingredients")
@@ -97,6 +99,7 @@ class ReadRecipe(State):
             self.start_recipe = False
             self.start_restock = False
             reset_shredded_log()
+
 
         return next_state
 

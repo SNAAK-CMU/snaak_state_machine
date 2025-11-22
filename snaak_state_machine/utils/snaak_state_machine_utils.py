@@ -15,6 +15,7 @@ from typing import Dict,Any, List
 from dynamixel_sdk_custom_interfaces.msg import SetPosition
 from snaak_shredded_grasp.srv import GetGraspPose
 from typing import List, Dict
+import json
 
 SHREDDED_LOG_PATH = "/home/snaak/Documents/recipe/shredded_log/shredded_ingredient_log.yaml"
 
@@ -54,63 +55,42 @@ def reset_shredded_log() -> None:
         yaml.dump({"shredded_ingredients": []}, f)
 
 class SandwichLogger():
-    def __init__(self, ingredients):
-        self.desired_dict = ingredients
-        self.desired_dict["bread"] = 2
-        self.actual_dict = {ingredient: 0 for ingredient in self.desired_dict}
+    def __init__(self, recipe):
+        self.desired_dict = recipe
+        # self.desired_dict["bread"] = {"slices_req": 2}
+        # self.actual_dict = {ingredient: 0 for ingredient in self.desired_dict}
         self.timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")    
-        self.COLUMNS = [
-            "timestamp", "success", "duration",
-            "bread_desired", "bread_actual",
-            "cheese_desired", "cheese_actual",
-            "ham_desired", "ham_actual"
-        ]
+        self.log_data = {
+            "timestamp": self.timestamp, 
+        }
         directory = "/home/snaak/Documents/manipulation_ws/src/snaak_state_machine/results"
+        for i in self.desired_dict:
+            self.log_data[f"{i}_desired"] = self.desired_dict[i]['slices_req']
+            self.log_data[f"{i}_placed"] = 0
+        self.log_data["success"] = False
 
         if not os.path.exists(directory):
             os.makedirs(directory)
-        self.filepath = os.path.join(directory, "result.csv")
-        self.num_placements_attempted = 0
-        self.num_placements_succeeded = 0
+        self.filepath = os.path.join(directory, f"result_{self.timestamp.replace(':', '').replace(' ', '-')}.yaml")
+
+        # self.num_placements_attempted = 0
+        # self.num_placements_succeeded = 0
         self.terminated = False
 
-    def update(self, ingredient_id, num_placed):
-        if ingredient_id == "bread_top_slice" or ingredient_id == "bread_bottom_slice":
-            ingredient_id = "bread"
-        if ingredient_id not in self.desired_dict:
-            raise Exception("Invalid Ingredient")
-        if ingredient_id != "bread":
-            self.num_placements_attempted += 1
-            if 0 < num_placed < 3:
-                self.num_placements_succeeded += 1 
-        # print(f"Placed {num_placed} of {ingredient_id}")
-        self.actual_dict[ingredient_id] += num_placed
+    def update(self, current_ingredient, placed):
+        self.log_data[f"{current_ingredient}_placed"] += placed
 
     def fail(self):
         self.end(fail=True)
         
     def end(self, fail=False):
         if not self.terminated:
-            if self.num_placements_attempted == 0 or self.num_placements_succeeded / self.num_placements_attempted < 0.75:
-                fail = True
 
-            data = {col: 0 for col in self.COLUMNS}
-            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            data.update({
-                "timestamp": self.timestamp,
-                "success": "Yes" if not fail else "No",
-                "duration" : (datetime.now() - datetime.strptime(self.timestamp, "%Y-%m-%d %H:%M:%S")).total_seconds(),
-            })
+            self.log_data["duration"] = (datetime.now() - datetime.strptime(self.timestamp, "%Y-%m-%d %H:%M:%S")).total_seconds()
             
-            for ingred in self.desired_dict:
-                data[f"{ingred}_desired"] = self.desired_dict[ingred]
-                data[f"{ingred}_actual"] = self.actual_dict.get(ingred, 0)
-
-            with open(self.filepath, "a", newline="", encoding="utf8") as f:
-                writer = csv.DictWriter(f, fieldnames=self.COLUMNS)
-                if f.tell() == 0: # if empty, create header
-                    writer.writeheader()
-                writer.writerow(data)
+            with open(self.filepath, "w+", encoding="utf-8") as f:
+                yaml.safe_dump(self.log_data, f, sort_keys=False)
+            
             self.terminated = True
 
 def load_recipe_dict(yaml_path: str) -> Dict[str, Dict[str, int]]:
@@ -458,14 +438,14 @@ def move_soft_gripper(node, publisher, ingrdieent_type):
 
 
 if __name__ == "__main__":
-    ingred= {"cheese" : 2, "ham": 2}
-    log = SandwichLogger(ingred)
+    recipe= {"cheese" : 2, "onions": 1}
+    log = SandwichLogger(recipe)
     log.update("cheese", 2)
-    log.update("ham", 1)
-    log.update("bread_top_slice", 1)
-    log.update("bread_bottom_slice", 1)
+    log.update("onions", 5.0)
+    # log.update("bread_top_slice", 1)
+    # log.update("bread_bottom_slice", 1)
     log.end()
 
-    input()
-    log = SandwichLogger(ingred)
-    log.fail()
+    # input()
+    # log = SandwichLogger(ingred)
+    # log.fail()

@@ -36,7 +36,7 @@ class FailState(State):
         yasmin.YASMIN_LOG_INFO("Recipe data saved to stock.yaml")
 
         blackboard["failed"] = True
-        
+        blackboard["logger"].fail()
         # Simulate operator input for testing purposes
         input = "ok"  # Replace this with actual input handling logic if needed
         time.sleep(1)

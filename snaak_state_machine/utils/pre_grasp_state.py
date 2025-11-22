@@ -166,6 +166,7 @@ class PreGraspState(State):
         file_path = "/home/snaak/Documents/recipe/stock.yaml"
         update_stock_yaml(blackboard['stock'],file_path)
         yasmin.YASMIN_LOG_INFO("Recipe data saved to stock.yaml")
+        blackboard["logger"].end()
 
         return "finished"
 

@@ -42,6 +42,7 @@ def main():
 
     set_ros_loggers()
     # reset_shredded_log()
+    
 
     sm = StateMachine(outcomes=["outcome99"])
 

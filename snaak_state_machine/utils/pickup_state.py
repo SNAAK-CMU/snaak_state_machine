@@ -114,6 +114,7 @@ class PickupState(State):
                 if result == True:
                     yasmin.YASMIN_LOG_INFO("Goal succeeded")
                     blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] = 0
+                    blackboard["logger"].update(blackboard["current_ingredient"],0)
                     if blackboard['current_ingredient_type'] == "shredded":
                         log_shredded_placement(blackboard['current_ingredient'],weight = pre_weight - curr_weight, passed=False)
                     return "next_ingredient"

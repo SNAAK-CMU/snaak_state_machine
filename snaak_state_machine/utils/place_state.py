@@ -98,11 +98,10 @@ class PlaceState(State):
                 yasmin.YASMIN_LOG_INFO(f"Delta in placement weight {weight_delta}")
                 yasmin.YASMIN_LOG_INFO("Failed to place the ingredient, retrying...")
                 
-                
-
                 if blackboard["retry_place"] == 3:
 
                     blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] = 0
+                    blackboard["logger"].update(blackboard["current_ingredient"],0)
                     yasmin.YASMIN_LOG_INFO(
                         "Moving to the next ingredient in the recipe"
                     )
@@ -125,7 +124,11 @@ class PlaceState(State):
                 
                 # TODO: should we update recipe in place state or pre grasp state
                 blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] -= 1 # Updates the recipe
-                log_shredded_placement(ingredient_name=blackboard['current_ingredient'],weight = weight_delta, passed=True)
+                if weight_delta_sum < weight_per_serving +5 and weight_delta_sum > weight_per_serving -5:
+                    log_shredded_placement(ingredient_name=blackboard['current_ingredient'],weight = weight_delta, passed=True)
+                    blackboard["logger"].update(blackboard["current_ingredient"], weight_delta)
+                else:
+                    log_shredded_placement(ingredient_name=blackboard['current_ingredient'], weight=weight_delta, passed=False)
                 print(
                     f"Remaining {blackboard['current_ingredient']}: {blackboard['stock'][blackboard['current_ingredient']]['weight']}"
                 )
@@ -151,6 +154,7 @@ class PlaceState(State):
                         return "failed"
                     else:
                         blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] = 0
+                        blackboard["logger"].update(blackboard["current_ingredient"],0)
                         yasmin.YASMIN_LOG_INFO(
                             "Moving to the next ingredient in the recipe"
                         )
@@ -199,8 +203,10 @@ class PlaceState(State):
                 self.node, self._check_sandwitch_client, ingredient_name, placed_slices
             )
             if sandwich_check_response == True:
+                blackboard["logger"].update(blackboard["current_ingredient"],placed_slices)
                 yasmin.YASMIN_LOG_INFO(f"bread bottom slice placed correctly")
             else:
+                blackboard["logger"].update(blackboard["current_ingredient"],0)
                 yasmin.YASMIN_LOG_INFO(f"bread not placed correctly")
 
         elif blackboard['stock'][blackboard['current_ingredient']]['type'] == "bread" and blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] == 0 and check_sandwich:
@@ -210,7 +216,9 @@ class PlaceState(State):
             )
             if sandwich_check_response == True:
                 yasmin.YASMIN_LOG_INFO(f"bread placed correctly")
+                blackboard["logger"].update(blackboard["current_ingredient"],placed_slices)
             else:
+                blackboard["logger"].update(blackboard["current_ingredient"],0)
                 yasmin.YASMIN_LOG_INFO(f"bread not placed correctly")
         
 
@@ -223,7 +231,9 @@ class PlaceState(State):
 
             if sandwich_check_response == True:
                 yasmin.YASMIN_LOG_INFO(f"{ingredient_name} placed correctly")
+                blackboard["logger"].update(blackboard["current_ingredient"],placed_slices)
             else:
+                blackboard["logger"].update(blackboard["current_ingredient"],0)
                 yasmin.YASMIN_LOG_INFO(f"{ingredient_name} not placed correctly")
 
         else:
