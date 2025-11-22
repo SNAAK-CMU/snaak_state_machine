@@ -68,6 +68,8 @@ class PickupState(State):
         is_retry = False
 
         while retry_pickup <= pickup_tries:  # change this to try more pick ups
+            yasmin.YASMIN_LOG_INFO(f"Pickup attempt {retry_pickup} of {pickup_tries} for {blackboard['current_ingredient']}")
+
             if int(blackboard['stock'][blackboard['current_ingredient']]['bin']) in [1,2,3]:
                 pre_weight = get_weight(self.node, self._get_weight_right_bins)
             elif int(blackboard['stock'][blackboard['current_ingredient']]['bin']) in [4,5,6]:

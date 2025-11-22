@@ -99,7 +99,7 @@ class PlaceState(State):
                 yasmin.YASMIN_LOG_INFO("Failed to place the ingredient, retrying...")
                 
                 if blackboard["retry_place"] == 3:
-
+                    blackboard["retry_place"] = 0
                     blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] = 0
                     blackboard["logger"].update(blackboard["current_ingredient"],0)
                     yasmin.YASMIN_LOG_INFO(
@@ -153,6 +153,7 @@ class PlaceState(State):
                         )
                         return "failed"
                     else:
+                        blackboard["retry_place"] = 0
                         blackboard["recipe"][blackboard['current_ingredient']]['slices_req'] = 0
                         blackboard["logger"].update(blackboard["current_ingredient"],0)
                         yasmin.YASMIN_LOG_INFO(
