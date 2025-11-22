@@ -66,6 +66,7 @@ class PickupState(State):
         time.sleep(2)  # Time delay due to transformation issues
         pickup_tries = 3
         is_retry = False
+        delta = 0.0
 
         while retry_pickup <= pickup_tries:  # change this to try more pick ups
             yasmin.YASMIN_LOG_INFO(f"Pickup attempt {retry_pickup} of {pickup_tries} for {blackboard['current_ingredient']}")
@@ -156,18 +157,20 @@ class PickupState(State):
                 return "failed"
 
             yasmin.YASMIN_LOG_INFO(
-                f"Delta in pick up weight {pre_weight-curr_weight}"
+                f"Delta in pick up weight {delta + (pre_weight-curr_weight)}"
             )
 
             # -------------------------------------------------------------------------------------
             # --------------------- Check weight for shredded else check for sliced ---------------
             # -------------------------------------------------------------------------------------
             if blackboard['current_ingredient_type'] == "shredded":
+                
                 weight_delta = pre_weight - curr_weight
+                delta += weight_delta
                 target_weight = blackboard['stock'][blackboard['current_ingredient']]['weight_per_serving']
                 
-                is_underweight = weight_delta < target_weight - 5
-                is_overweight = weight_delta > target_weight + 5
+                is_underweight = delta < target_weight - 5
+                is_overweight = delta > target_weight + 5
                 is_last_attempt = retry_pickup == pickup_tries - 1
 
                 # Retry if:
@@ -198,15 +201,15 @@ class PickupState(State):
                 else:
                     retry_pickup = 0
                     # weight_delta is already calculated above
-                    blackboard["picked_weight"] = weight_delta
+                    blackboard["picked_weight"] = delta
 
                     yasmin.YASMIN_LOG_INFO(
-                        f"Picked weight {weight_delta}g of {blackboard['current_ingredient']}"
+                        f"Picked weight {delta}g of {blackboard['current_ingredient']}"
                     )
-                    blackboard['stock'][blackboard['current_ingredient']]['weight'] -= weight_delta
+                    blackboard['stock'][blackboard['current_ingredient']]['weight'] -= delta
                     
                     
-
+            #sliced
             else:
                 if pre_weight - curr_weight <= 4.0:
                     disable_vacuum(self.node, self._disable_vacuum_client)
