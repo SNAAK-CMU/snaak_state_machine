@@ -323,7 +323,7 @@ def get_point_XYZ(node, service_client, ingredient_name, location, pickup):
 
     return result
 
-def get_shredded_grasp_pose(node, service_client, bin_id, ingredient_name, desired_weight, is_retry):
+def get_shredded_grasp_pose(node, service_client, bin_id, ingredient_name, desired_weight, is_retry, was_overweight):
     """
     Retrieves the grasp pose for shredded ingredients using a dedicated service.
     This function sends a request to a service to obtain the grasp pose for shredded
@@ -345,6 +345,7 @@ def get_shredded_grasp_pose(node, service_client, bin_id, ingredient_name, desir
     grasp_pose_request.ingredient_name = ingredient_name
     grasp_pose_request.desired_pickup_weight = desired_weight
     grasp_pose_request.is_retry = is_retry
+    grasp_pose_request.was_overweight = was_overweight
 
     timeout = 5.0  # seconds
     try:

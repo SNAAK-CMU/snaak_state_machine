@@ -90,8 +90,16 @@ class PickupState(State):
 
                 while not self._get_shredded_grasp_pose_client.wait_for_service(timeout_sec=1.0):
                     print("Shredded Grasp Service not available, waiting again...")
+                
+                if is_retry == False:
+                    was_overweight = False
+                else:
+                    if delta > desired_weight + 5:
+                        was_overweight = True
+                    else:
+                        was_overweight = False
 
-                pickup_point = get_shredded_grasp_pose(self.node, self._get_shredded_grasp_pose_client, bin_id, ingredient_name, desired_weight, is_retry)
+                pickup_point = get_shredded_grasp_pose(self.node, self._get_shredded_grasp_pose_client, bin_id, ingredient_name, desired_weight, is_retry, was_overweight)
                 # pickup_point = SimpleNamespace(x=0.0, y=0.0, z=-0.03)
             else:
                 pickup_point = get_point_XYZ(
