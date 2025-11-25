@@ -4,6 +4,7 @@ from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 import os
 from ament_index_python.packages import get_package_share_directory
+from launch_ros.actions import Node
 
 def generate_launch_description():
     vision_launch = IncludeLaunchDescription(
@@ -33,6 +34,19 @@ def generate_launch_description():
                 )
             ])
         )   
+    
+    dynamixel_node = Node(
+        package='dynamixel_sdk_examples',
+        executable='read_write_node',
+        name='dynamixel_node'
+    )
+
+    shredded_grasp_node = Node(
+        package='snaak_shredded_grasp',
+        executable='snaak_shredded_grasp_node.py',
+        name='snaak_shredded_grasp_node',
+        output='screen'
+    )
     # state_machine_node = launch_ros.actions.Node(
     #         package='snaak_state_machine',
     #         executable='snaak_state_machine_main',
@@ -42,5 +56,7 @@ def generate_launch_description():
         vision_launch,
         manipulation_launch,
         weight_launch,
+        dynamixel_node,
+        shredded_grasp_node
         #state_machine_node
     ])

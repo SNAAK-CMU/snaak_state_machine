@@ -1,2 +1,3 @@
 log/result.csv
 results/result.csv
+results/*.yaml
