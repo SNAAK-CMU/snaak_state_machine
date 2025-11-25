@@ -13,66 +13,84 @@ from pathlib import Path
 import yaml
 from typing import Dict,Any, List
 from dynamixel_sdk_custom_interfaces.msg import SetPosition
+from snaak_shredded_grasp.srv import GetGraspPose
+from typing import List, Dict
+import json
 
+SHREDDED_LOG_PATH = "/home/snaak/Documents/recipe/shredded_log/shredded_ingredient_log.yaml"
+
+
+def log_shredded_placement(ingredient_name: str, weight: float, passed: bool) -> None:
+    """
+    Append shredded ingredient result to the YAML log.
+    
+    Args:
+        ingredient_name: Name of ingredient
+        passed: True if within tolerance, False otherwise
+    """
+    os.makedirs(os.path.dirname(SHREDDED_LOG_PATH), exist_ok=True)
+    
+    # Read existing data
+    if os.path.exists(SHREDDED_LOG_PATH):
+        with open(SHREDDED_LOG_PATH, 'r') as f:
+            data = yaml.safe_load(f) or {"shredded_ingredients": []}
+    else:
+        data = {"shredded_ingredients": []}
+    
+    # Append new entry
+    data["shredded_ingredients"].append({
+        "ingredient_name": ingredient_name,
+        "weight": weight,
+        "status": "PASS" if passed else "FAIL"
+    })
+    
+    # Write back
+    with open(SHREDDED_LOG_PATH, 'w') as f:
+        yaml.dump(data, f, default_flow_style=False)
+
+def reset_shredded_log() -> None:
+    """Call at start of each assembly to clear previous run."""
+    os.makedirs(os.path.dirname(SHREDDED_LOG_PATH), exist_ok=True)
+    with open(SHREDDED_LOG_PATH, 'w') as f:
+        yaml.dump({"shredded_ingredients": []}, f)
 
 class SandwichLogger():
-    def __init__(self, ingredients):
-        self.desired_dict = ingredients
-        self.desired_dict["bread"] = 2
-        self.actual_dict = {ingredient: 0 for ingredient in self.desired_dict}
+    def __init__(self, recipe):
+        self.desired_dict = recipe
+        # self.desired_dict["bread"] = {"slices_req": 2}
+        # self.actual_dict = {ingredient: 0 for ingredient in self.desired_dict}
         self.timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")    
-        self.COLUMNS = [
-            "timestamp", "success", "duration",
-            "bread_desired", "bread_actual",
-            "cheese_desired", "cheese_actual",
-            "ham_desired", "ham_actual"
-        ]
+        self.log_data = {
+            "timestamp": self.timestamp, 
+        }
         directory = "/home/snaak/Documents/manipulation_ws/src/snaak_state_machine/results"
+        for i in self.desired_dict:
+            self.log_data[f"{i}_desired"] = self.desired_dict[i]['slices_req']
+            self.log_data[f"{i}_placed"] = 0
+        self.log_data["success"] = False
 
         if not os.path.exists(directory):
             os.makedirs(directory)
-        self.filepath = os.path.join(directory, "result.csv")
-        self.num_placements_attempted = 0
-        self.num_placements_succeeded = 0
+        self.filepath = os.path.join(directory, f"result_{self.timestamp.replace(':', '').replace(' ', '-')}.yaml")
+
+        # self.num_placements_attempted = 0
+        # self.num_placements_succeeded = 0
         self.terminated = False
 
-    def update(self, ingredient_id, num_placed):
-        if ingredient_id == "bread_top_slice" or ingredient_id == "bread_bottom_slice":
-            ingredient_id = "bread"
-        if ingredient_id not in self.desired_dict:
-            raise Exception("Invalid Ingredient")
-        if ingredient_id != "bread":
-            self.num_placements_attempted += 1
-            if 0 < num_placed < 3:
-                self.num_placements_succeeded += 1 
-        # print(f"Placed {num_placed} of {ingredient_id}")
-        self.actual_dict[ingredient_id] += num_placed
+    def update(self, current_ingredient, placed):
+        self.log_data[f"{current_ingredient}_placed"] += placed
 
     def fail(self):
         self.end(fail=True)
         
     def end(self, fail=False):
         if not self.terminated:
-            if self.num_placements_attempted == 0 or self.num_placements_succeeded / self.num_placements_attempted < 0.75:
-                fail = True
 
-            data = {col: 0 for col in self.COLUMNS}
-            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            data.update({
-                "timestamp": self.timestamp,
-                "success": "Yes" if not fail else "No",
-                "duration" : (datetime.now() - datetime.strptime(self.timestamp, "%Y-%m-%d %H:%M:%S")).total_seconds(),
-            })
+            self.log_data["duration"] = (datetime.now() - datetime.strptime(self.timestamp, "%Y-%m-%d %H:%M:%S")).total_seconds()
             
-            for ingred in self.desired_dict:
-                data[f"{ingred}_desired"] = self.desired_dict[ingred]
-                data[f"{ingred}_actual"] = self.actual_dict.get(ingred, 0)
-
-            with open(self.filepath, "a", newline="", encoding="utf8") as f:
-                writer = csv.DictWriter(f, fieldnames=self.COLUMNS)
-                if f.tell() == 0: # if empty, create header
-                    writer.writeheader()
-                writer.writerow(data)
+            with open(self.filepath, "w+", encoding="utf-8") as f:
+                yaml.safe_dump(self.log_data, f, sort_keys=False)
+            
             self.terminated = True
 
 def load_recipe_dict(yaml_path: str) -> Dict[str, Dict[str, int]]:
@@ -161,6 +179,8 @@ def load_stock_dict(yaml_path: str) -> Dict[str, Dict[str, Any]]:
             bin_id = int(info.get("bin", 0))
             type_ = str(info.get("type", ""))
             wps = float(info.get("weight_per_slice", 0.0))
+            weight = float(info.get("weight", 0.0))
+            weight_per_serving = float(info.get("weight_per_serving", 0.0))
         except (TypeError, ValueError) as e:
             raise ValueError(f"Bad field types for ingredient '{name}': {e}")
         stock[name] = {
@@ -168,6 +188,8 @@ def load_stock_dict(yaml_path: str) -> Dict[str, Dict[str, Any]]:
             "bin": bin_id,
             "type": type_,
             "weight_per_slice": wps,
+            "weight": weight,
+            "weight_per_serving": weight_per_serving,
         }
     return stock
 
@@ -193,17 +215,22 @@ def update_stock_yaml(stock_dict: Dict[str, Dict[str, Any]], yaml_path: str) -> 
     data = {"ingredients": {}}
     for name, info in stock_dict.items():
         # Ensure all expected keys are present
-        data["ingredients"][name] = {
-            "slices": int(info.get("slices", 0)),
-            "bin": int(info.get("bin", 0)),
-            "type": str(info.get("type", "")),
-            "weight_per_slice": float(info.get("weight_per_slice", 0.0)),
+        if str(info.get("type")) != "shredded":
+            data["ingredients"][name] = {
+                "slices": int(info.get("slices", 0)),
+                "bin": int(info.get("bin", 0)),
+                "type": str(info.get("type", "")),
+                "weight_per_slice": float(info.get("weight_per_slice", 0.0)),
+        }
+        else:
+            data["ingredients"][name] = {
+                "weight": int(info.get("weight", 0)),
+                "bin": int(info.get("bin", 0)),
+                "type": str(info.get("type", "")),
+                "weight_per_serving": float(info.get("weight_per_serving", 0.0)),
         }
     with open(yaml_path, "w", encoding="utf-8") as f:
         yaml.safe_dump(data, f, sort_keys=False)
-
-# Example usage:
-# update_stock_yaml(stock, "/home/snaak/Documents/recipe/stock.yaml")
 
 def get_ingredient(stock: Dict[str, Dict[str, Any]],  recipe_keys: List[str], ingredient_type: str) -> List[str]:
 
@@ -245,7 +272,6 @@ def send_goal(node, action_client: ActionClient, action_goal):
     else:
         return False
 
-
 def get_point_XYZ(node, service_client, ingredient_name, location, pickup):
     """
     Retrieves the XYZ coordinates of a specified location using a vision service.
@@ -269,16 +295,19 @@ def get_point_XYZ(node, service_client, ingredient_name, location, pickup):
     coordRequest.location_id = int(location)
     coordRequest.ingredient_name = ingredient_name
     coordRequest.timestamp = 1.0  # change this to current time for sync
+    try:
+        if pickup:
+            future = service_client.call_async(coordRequest)
+            rclpy.spin_until_future_complete(node, future, timeout_sec=5.0)
+            result = future.result()
 
-    if pickup:
-        future = service_client.call_async(coordRequest)
-        rclpy.spin_until_future_complete(node, future)
-        result = future.result()
-
-    else:
-        future = service_client.call_async(coordRequest)
-        rclpy.spin_until_future_complete(node, future)
-        result = future.result()
+        else:
+            future = service_client.call_async(coordRequest)
+            rclpy.spin_until_future_complete(node, future, timeout_sec=5.0)
+            result = future.result()
+    except TimeoutError:
+        print("Get XYZ service call timed out after 5.0 seconds.")
+        return None
 
     if result.x == -1 or result.y == -1 or result.z == None:
         yasmin.YASMIN_LOG_INFO("Unable to Get XYZ from Vision Node")
@@ -294,6 +323,53 @@ def get_point_XYZ(node, service_client, ingredient_name, location, pickup):
 
     return result
 
+def get_shredded_grasp_pose(node, service_client, bin_id, ingredient_name, desired_weight, is_retry, was_overweight):
+    """
+    Retrieves the grasp pose for shredded ingredients using a dedicated service.
+    This function sends a request to a service to obtain the grasp pose for shredded
+    ingredients based on the specified bin ID, ingredient name, and desired weight.
+    Args:
+        node (rclpy.node.Node): The ROS 2 node instance used for spinning and logging.
+        service_client (rclpy.client.Client): The service client used to call the grasp pose service.
+        bin_id (int): The ID of the bin containing the shredded ingredient.
+        ingredient_name (str): The name of the shredded ingredient.
+        desired_weight (float): The desired weight of the shredded ingredient to be grasped.
+    Returns:
+        result (GetGraspPose.Response or None): The response from the grasp pose service containing
+        the XYZ coordinates. Returns `None` if the coordinates are invalid or if the depth
+        information is unavailable.
+    """
+
+    grasp_pose_request = GetGraspPose.Request()
+    grasp_pose_request.location_id = bin_id
+    grasp_pose_request.ingredient_name = ingredient_name
+    grasp_pose_request.desired_pickup_weight = desired_weight
+    grasp_pose_request.is_retry = is_retry
+    grasp_pose_request.was_overweight = was_overweight
+
+    timeout = 5.0  # seconds
+    try:
+        future = service_client.call_async(grasp_pose_request)
+        rclpy.spin_until_future_complete(node, future, timeout_sec=timeout)
+        result = future.result()  # This will now either contain the response or raise an exception
+    except TimeoutError:
+        print(f"Service call timed out after {timeout} seconds.")
+        result = None
+
+    if result is None or result.x == -1 or result.y == -1 or result.z == None:
+        yasmin.YASMIN_LOG_INFO("Unable to Get Grasp Pose from Shredded Grasp Node")
+        return None
+
+    elif result.z == -1:
+        yasmin.YASMIN_LOG_INFO("Unable to get Depth")
+        return None
+
+    yasmin.YASMIN_LOG_INFO(
+        f"Result from Shredded Grasp Node: {result.x}, {result.y}, {result.z}"
+    )
+
+    return result
+
 def get_weight(node, service_client):
 
     read_weight = ReadWeight.Request()
@@ -301,13 +377,7 @@ def get_weight(node, service_client):
     rclpy.spin_until_future_complete(node, future)
     result = future.result()
 
-    # TODO: add error checking for the result
-    # define error from weight scale
-
-    yasmin.YASMIN_LOG_INFO(f"weight: {result}")
-
     return result.weight.data
-
 
 def get_sandwich_check(node, service_client, ingredient_name, ingredient_count):
 
@@ -320,14 +390,12 @@ def get_sandwich_check(node, service_client, ingredient_name, ingredient_count):
 
     return result.is_placed, result.is_error
 
-
 def disable_arm(node, service_client):
     disable_req = Trigger.Request()
     future = service_client.call_async(disable_req)
     rclpy.spin_until_future_complete(node, future)
 
     yasmin.YASMIN_LOG_INFO(f"arm disabled")
-
 
 def enable_arm(node, service_client):
     enable_req = Trigger.Request()
@@ -336,7 +404,6 @@ def enable_arm(node, service_client):
 
     yasmin.YASMIN_LOG_INFO(f"arm enabled")
 
-
 def disable_vacuum(node, service_client):
     disable_req = Trigger.Request()
     future = service_client.call_async(disable_req)
@@ -344,14 +411,12 @@ def disable_vacuum(node, service_client):
 
     yasmin.YASMIN_LOG_INFO(f"vacuum disabled")
 
-
 def reset_sandwich_checker(node, service_client):
     reset_sandwich = Trigger.Request()
     future = service_client.call_async(reset_sandwich)
     rclpy.spin_until_future_complete(node, future)
 
     yasmin.YASMIN_LOG_INFO(f"reset sandwich checker")
-
 
 def save_image(node, service_client):
     disable_req = Trigger.Request()
@@ -368,21 +433,20 @@ def move_soft_gripper(node, publisher, ingrdieent_type):
     msg = SetPosition()
     msg.id = 1
     msg.position = position
+    msg.max_speed = 60
     publisher.publish(msg)
     yasmin.YASMIN_LOG_INFO(f"Gripper moved to position: {position} for {ingrdieent_type}")
 
 
 if __name__ == "__main__":
-    ingred= {"cheese" : 2, "ham": 2}
-    log = SandwichLogger(ingred)
+    recipe= {"cheese" : 2, "onions": 1}
+    log = SandwichLogger(recipe)
     log.update("cheese", 2)
-    log.update("ham", 1)
-    log.update("bread_top_slice", 1)
-    log.update("bread_bottom_slice", 1)
-
-
-
+    log.update("onions", 5.0)
+    # log.update("bread_top_slice", 1)
+    # log.update("bread_bottom_slice", 1)
     log.end()
-    input()
-    log = SandwichLogger(ingred)
-    log.fail()
+
+    # input()
+    # log = SandwichLogger(ingred)
+    # log.fail()

@@ -18,7 +18,7 @@ from snaak_vision.srv import GetXYZFromImage, CheckIngredientPlace
 from snaak_state_machine.utils.snaak_state_machine_utils import (
         SandwichLogger, send_goal, get_point_XYZ, get_weight,
         get_sandwich_check, disable_arm, disable_vacuum, reset_sandwich_checker,
-        save_image, enable_arm
+        save_image, enable_arm, reset_shredded_log
         )
 import traceback
 from snaak_state_machine.utils.read_stock import ReadStock
@@ -41,6 +41,8 @@ def main():
     node = rclpy.create_node("sfm_fsm_node")
 
     set_ros_loggers()
+    # reset_shredded_log()
+    
 
     sm = StateMachine(outcomes=["outcome99"])
 

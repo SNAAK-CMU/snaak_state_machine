@@ -18,7 +18,7 @@ from snaak_vision.srv import GetXYZFromImage, CheckIngredientPlace
 from snaak_state_machine.utils.snaak_state_machine_utils import (
         SandwichLogger, send_goal, get_point_XYZ, get_weight,
         get_sandwich_check, disable_arm, disable_vacuum, reset_sandwich_checker,
-        save_image, enable_arm, load_recipe_dict, load_stock_dict
+        save_image, enable_arm, load_recipe_dict, load_stock_dict, reset_shredded_log,
         )
 import traceback
 from pathlib import Path
@@ -32,6 +32,7 @@ class ReadStock(State):
     def execute(self, blackboard):
         yasmin.YASMIN_LOG_INFO("Reading Stock")
         time.sleep(2)
+        reset_shredded_log()
         stock_file_path = "/home/snaak/Documents/recipe/stock.yaml"
         if os.path.exists(stock_file_path):
             try:
